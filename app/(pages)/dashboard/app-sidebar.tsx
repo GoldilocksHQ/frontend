@@ -33,17 +33,17 @@ const items = [
 
 export function AppSidebar() {
   return (
-    <Sidebar collapsible="none" className="p-4 pt-4">
+    <Sidebar collapsible="none" className="h-screen border-r p-4 pt-4">
       <SidebarHeader>
-        <h2 className="text-lg font-semibold">Goldilocks</h2>
+        <h2 className="text-xl font-semibold">Goldilocks</h2>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="flex flex-col flex-1">
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton asChild>
                 <a href={item.url}>
-                  <item.icon />
+                  <item.icon className="w-4 h-4" />
                   <span>{item.title}</span>
                 </a>
               </SidebarMenuButton>

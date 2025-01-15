@@ -39,10 +39,10 @@ export default function DashboardPage() {
 
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+      <div className="flex items-center justify-between mb-4">
         <h2 className="text-3xl font-bold tracking-tight">Home</h2>
       </div>
-      <div className="items-top justify-center p-4 mb-4 font-roboto">
+      <div className="items-top justify-center mb-4 font-roboto">
         <CardApiKey apiKey={apiKey}></CardApiKey>
       </div>
     </div>
