@@ -1,4 +1,5 @@
 "use client";
+import { authServices } from "@/services/authServices";
 import { useState } from "react";
 
 export default function SignupPage() {
@@ -8,19 +9,28 @@ export default function SignupPage() {
   const [success, setSuccess] = useState("");
 
   const handleSignup = async () => {
-    try {
-      const res = await fetch("/api/auth", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ action: "signup", email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setSuccess("Signup successful");
-    }catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An unknown error occurred");
+    const {error} = await authServices.signUp({ email, password });
+    if (error) {
+      setError(String(error));
+    } else {
+      setSuccess("Sigup successful");
     }
   };
+      
+
+    // try {
+    //   const res = await fetch("/api/auth", {
+    //     method: "POST",
+    //     headers: {"Content-Type": "application/json"},
+    //     body: JSON.stringify({ action: "signup", email, password }),
+    //   });
+    //   const data = await res.json();
+    //   if (!res.ok) throw new Error(data.error);
+    //   setSuccess("Signup successful");
+    // }catch (error: unknown) {
+    //   setError(error instanceof Error ? error.message : "An unknown error occurred");
+    // }
+  // };
 
   return (
     <div>

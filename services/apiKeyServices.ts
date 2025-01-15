@@ -6,8 +6,8 @@ export async function generateKey(userId: string) {
     const newApiKey = `api_${uuidv4()}`;
     const { data, error } = await supabase
       .from("api_keys")
-      .insert([{ user_id: userId, key: newApiKey }])
-      .select("*");
+      .insert([{ user_id: userId, api_key: newApiKey }])
+      .select("api_key")
     
     if (error) throw error
     return {data , error: null}

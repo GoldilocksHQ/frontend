@@ -1,19 +1,17 @@
-'use client';
-import React, { useState } from 'react';
+"use client";
+import { authServices } from "@/services/authServices";
+import React, { useState } from "react";
 
 export default function SignoutPage() {
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
 
   const handleLogout = async () => {
-    const res = await fetch('/api/auth/signout', {
-      method: 'POST',
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setMessage(data.message);
+    const {error} = await authServices.signOut();
+    if (error) {
+      setMessage(String(error));
       // Clear any tokens/cookies
     } else {
-      setMessage(`Error: ${data.error}`);
+      setMessage("Signout successful");
     }
   };
 

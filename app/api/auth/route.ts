@@ -5,18 +5,15 @@ import {authServices, SignUpData, SignInData} from "../../../services/authServic
 export async function POST(req: NextRequest) {
   try {
     const { action, email, password } = await req.json();
+    const result = checkAccountCredentials(email, password);
     
-    if( !email ){
-      return NextResponse.json({ error: 'Email address is required' }, { status: 400 });
-    } else if( !password ) {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
-    }
-
     switch (action) {
       case 'signup':
+        if (result) return result;
         const signupResponse = await handleSignup(email, password);
         return NextResponse.json(signupResponse, { status: 200 });
       case 'signin':
+        if (result) return result;
         const signinResponse = await handleSignin(email, password);
         return NextResponse.json(signinResponse, { status: 200 });
       case 'signout':
@@ -29,6 +26,15 @@ export async function POST(req: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
+}
+
+function checkAccountCredentials(email: string, password: string){
+  if( !email ){
+    return NextResponse.json({ error: 'Email address is required' }, { status: 400 });
+  } else if( !password ) {
+    return NextResponse.json({ error: 'Password is required' }, { status: 400 });
+  }
+  return null;
 }
 
 
