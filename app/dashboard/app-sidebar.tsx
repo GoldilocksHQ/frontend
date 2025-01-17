@@ -1,4 +1,4 @@
-import { Home, User, Inbox } from "lucide-react"
+import { Home, User, Inbox, KeyRound } from "lucide-react"
 import {
   Sidebar,
   SidebarHeader,
@@ -28,6 +28,11 @@ const items = [
     title: "Account",
     url: "/dashboard/account",
     icon: User,
+  },
+  {
+    title: "Token Manager",
+    url: "/dashboard/token-manager-test",
+    icon: KeyRound,
   },
 ]
 
