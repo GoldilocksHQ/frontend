@@ -1,6 +1,6 @@
 "use client";
 
-import { getCredentials, storeCredentials, updateCredentials, credentialsExists, Credentials, TokenError } from '@/services/supabase/server';
+import { getCredentials, storeCredentials, updateCredentials, tokenExists as tokenExists, Credentials, TokenError } from '@/services/supabase/server';
 
 export class TokenManager {
   private credentials: Credentials;
@@ -14,8 +14,8 @@ export class TokenManager {
   }
 
   async getToken(): Promise<Credentials | null> {
-    const updatedCredentials = await getCredentials(this.credentials);
-    if (updatedCredentials) this.setCredentials(updatedCredentials);
+    const { success, credentials: updatedCredentials } = await getCredentials(this.credentials);
+    if (success && updatedCredentials) this.setCredentials(updatedCredentials);
     return this.credentials || null;
   }
 
@@ -30,6 +30,6 @@ export class TokenManager {
   }
 
   async tokenExists(): Promise<boolean> {
-    return credentialsExists(this.credentials);
+    return tokenExists(this.credentials);
   }
 }

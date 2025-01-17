@@ -81,6 +81,12 @@ export async function getSession() {
   return session;
 }
 
+export async function getUser() {
+  const supabase = await createClient() ;
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
 export async function generateKey(userId: string) {
   const supabase = await createClient() ;
   return await supabase
@@ -124,7 +130,7 @@ function validateCredentials(credentials: Credentials) {
   if (!credentials.tokenName) throw { message: "Token name is required", code: "MISSING_TOKEN_NAME" };
 }
 
-export async function getCredentials(credentials: Credentials): Promise<Credentials | null> {
+export async function getCredentials(credentials: Credentials): Promise<{success: boolean, credentials: Credentials | null, error: string | null}> {
   try {
     validateCredentials(credentials);
     
@@ -135,27 +141,31 @@ export async function getCredentials(credentials: Credentials): Promise<Credenti
       p_token_name: credentials.tokenName
     });
 
-    if (error) {
+    if (error ) {
       console.error('Error fetching token:', error);
-      return null;
+      return {success: false, credentials: null, error: error.message};
     }
 
-    if (!data) {
-      console.warn('No token found for the given credentials');
-      return null;
+    if (!data.success) {
+      console.warn(data.error);
+      return {success: false, credentials: null, error: data.error};
     }
     
     return {
-      userId: data.data.userId,
-      tokenName: data.data.tokenName,
-      tokenType: data.data.tokenType,
-      token: data.data.token,
-      createdAt: data.data.createdAt,
-      expiresAt: data.data.expiresAt
+      success: true,
+      credentials: {
+        userId: data.data.userId,
+        tokenName: data.data.tokenName,
+        tokenType: data.data.tokenType,
+        token: data.data.token,
+        createdAt: data.data.createdAt,
+        expiresAt: data.data.expiresAt
+      },
+      error: null
     };
   } catch (error) {
     console.error('Error in getCredentials:', error);
-    return null;
+    return {success: false, credentials: null, error: error instanceof Error ? error.message : 'Unknown error occurred'};
   }
 }
 
@@ -251,7 +261,7 @@ export async function updateCredentials(credentials: Credentials): Promise<{ suc
   }
 }
 
-export async function credentialsExists(credentials: Credentials): Promise<boolean> {
-  const token = await getCredentials(credentials);
-  return token !== null;
+export async function tokenExists(credentials: Credentials): Promise<boolean> {
+  const { success, credentials: updatedCredentials} = await getCredentials(credentials);
+  return success && updatedCredentials !== null && updatedCredentials?.token !== null;
 }
