@@ -1,17 +1,21 @@
 "use client";
-import { authServices } from "@/services/authServices";
+import { signOut } from "@/services/auth";
+import { useRouter } from "next/navigation";
 import React, { useState } from "react";
 
 export default function SignoutPage() {
   const [message, setMessage] = useState("");
+  const router = useRouter();
 
   const handleLogout = async () => {
-    const {error} = await authServices.signOut();
+    const {error} = await signOut();
     if (error) {
       setMessage(String(error));
       // Clear any tokens/cookies
     } else {
       setMessage("Signout successful");
+      // Redirect to signin page after successful signout
+      router.push('/dashboard/signin');
     }
   };
 

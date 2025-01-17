@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AIModel, ChatResponse } from "../../../../lib/aiModel"
+import { AIModel, ChatResponse } from "../../../lib/aiModel"
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
 const aiModels = [
