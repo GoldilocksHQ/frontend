@@ -5,15 +5,21 @@ import { UUID } from 'crypto';
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const searchParams = req.nextUrl.searchParams;
+    let userId = searchParams.get('userId');
+
+    if (!userId) {
+      const user = await getUser();
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        );
+      } else {
+        userId = user.id;
+      }
     }
 
-    const searchParams = req.nextUrl.searchParams;
     const spreadsheetId = searchParams.get('spreadsheetId');
     const range = searchParams.get('range');
 
@@ -25,7 +31,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { success, result, error } = await readValues(
-      user.id as UUID,
+      userId as UUID,
       spreadsheetId,
       range
     );
@@ -49,15 +55,21 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    // Get the body of the request
+    const { spreadsheetId, range, values, userId: passedUserId} = await req.json();
+    let userId = passedUserId;
 
-    const { spreadsheetId, range, values } = await req.json();
+    if (!userId) {
+      const user = await getUser();
+      if (!user) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        );
+      } else {
+        userId = user.id;
+      }
+    }
 
     if (!spreadsheetId || !range || !values) {
       return NextResponse.json(
@@ -67,7 +79,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { success, result, error } = await updateValues(
-      user.id as UUID,
+      userId as UUID,
       spreadsheetId,
       range,
       values

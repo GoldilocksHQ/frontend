@@ -66,10 +66,11 @@ export class ConnectorManager {
   async connectConnector(connectorId: string) {
     // call connectors/auth api to connect connector
     const response = await fetch('/api/connectors/auth', {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
+      cache: 'no-store',
       body: JSON.stringify({ connectorId }),
     });
     const data = await response.json();

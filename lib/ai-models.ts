@@ -6,20 +6,27 @@ export interface ChatResponse {
 }
 
 export const modelOptions = [
-  { value: "o1-mini", label: "o1-mini", provider: "OpenAI" },
+  { value: "o1-mini", label: "GPT-o1 Mini", provider: "OpenAI" },
   { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI' },
   { value: 'gpt-4', label: 'GPT-4', provider: 'OpenAI' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI' },
 ]
 
 export class AIModel {
   private selectedModel: string;
+  private selectedTools: Set<string>;
 
-  constructor(selectedModel: string) {
+  constructor(selectedModel: string, selectedTools: Set<string> = new Set()) {
     this.selectedModel = selectedModel;
+    this.selectedTools = selectedTools;
   }
 
   selectModel(model: string) {
     this.selectedModel = model;
+  }
+
+  setTools(tools: Set<string>) {
+    this.selectedTools = tools;
   }
 
   async chat(messages: Array<ChatCompletionMessageParam>): Promise<ChatResponse> {
@@ -29,7 +36,11 @@ export class AIModel {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ messages, model: this.selectedModel}),
+        body: JSON.stringify({
+          messages,
+          model: this.selectedModel,
+          selectedTools: Array.from(this.selectedTools)
+        }),
       });
 
       if (!response.ok) {
