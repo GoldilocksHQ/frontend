@@ -7,20 +7,15 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AIModel, ChatResponse } from "../../../lib/aiModel"
+import { AIModel, ChatResponse, modelOptions } from "../../../lib/ai-models"
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
-const aiModels = [
-  { value: "o1-mini", label: "o1-mini", provider: "OpenAI" },
-  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI' },
-  { value: 'gpt-4', label: 'GPT-4', provider: 'OpenAI' },
-  { value: 'claude-2', label: 'Claude 2', provider: 'Claude' },
-]
+
 
 export default function PlaygroundPage() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [input, setInput] = useState("");
-  const [selectedModelValue, setSelectedModel] = useState(aiModels[0].value)
+  const [selectedModelValue, setSelectedModel] = useState(modelOptions[0].value)
   
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -39,15 +34,16 @@ export default function PlaygroundPage() {
     setInput("");
 
     if (!selectedModelValue) return;
-    const selectedModel = aiModels.find((model) => model.value === selectedModelValue);
+    const selectedModel = modelOptions.find((model) => model.value === selectedModelValue);
     if (!selectedModel) return;
 
     try {
       switch (selectedModel.provider) {
         case "OpenAI":
-          const chatbot = new AIModel()
+          const chatbot = new AIModel(selectedModelValue)
           const prompt = currentMessages as Array<ChatCompletionMessageParam>
-          const response: ChatResponse = await chatbot.chat(prompt, selectedModelValue);
+          chatbot.selectModel(selectedModelValue)
+          const response: ChatResponse = await chatbot.chat(prompt);
 
           if (response) {
             setMessages([...currentMessages, { 
@@ -81,7 +77,7 @@ export default function PlaygroundPage() {
                 <SelectValue placeholder="Select a model" />
               </SelectTrigger>
               <SelectContent>
-                {aiModels.map((model) => (
+                {modelOptions.map((model) => (
                   <SelectItem key={model.value} value={model.value}>
                     {model.label}
                   </SelectItem>
@@ -127,47 +123,3 @@ export default function PlaygroundPage() {
     </div>
   )
 }
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-//   return (
-//     <div className="space-y-4">
-//       <h1 className="text-2xl font-playfair font-bold">Playground</h1>
-//       <div className="border p-4 rounded h-64 overflow-y-auto font-roboto">
-//         {messages.map((msg, idx) => (
-//           <div key={idx} className="mb-2">
-//             <span
-//               className={`font-semibold ${
-//                 msg.sender === "AI" ? "text-accent" : "text-black"
-//               }`}
-//             >
-//               {msg.sender}:
-//             </span>{" "}
-//             <span>{msg.text}</span>
-//           </div>
-//         ))}
-//       </div>
-//       <div className="flex space-x-2">
-//         <input
-//           className="flex-1 border p-2 rounded font-roboto"
-//           placeholder="Type a message..."
-//           value={input}
-//           onChange={(e) => setInput(e.target.value)}
-//         />
-//         <button
-//           onClick={handleSend}
-//           className="bg-accent text-white py-2 px-4 rounded hover:bg-opacity-90 transition"
-//         >
-//           Send
-//         </button>
-//       </div>
-//     </div>
-//   );
-// }

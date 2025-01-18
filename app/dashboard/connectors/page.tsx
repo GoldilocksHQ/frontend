@@ -4,37 +4,41 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getUser } from "@/services/supabase/server";
 import { useEffect, useState } from "react";
+import Image from "next/image";
+import { UserMappedConnector } from "@/lib/types";
+import { ConnectorManager } from "@/lib/connector-manager";
+import path from "path";
+import { Loader2 } from "lucide-react";
 
-interface Connector {
-  id: string;
-  connector_display_name: string;
-  is_connected: boolean;
-}
 
 export default function ConnectorsPage() {
-  const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [connectors, setConnectors] = useState<UserMappedConnector[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const logoPath = path.join("../../", "logos");
+  let connectorManager: ConnectorManager;
 
   useEffect(() => {
-    fetchConnectors();
+    const initializeConnectors = async () => {
+      await setConnectorManager();
+      await fetchConnectors();  
+    };
+    initializeConnectors();
   }, []);
 
-  const fetchConnectors = async () => {
-    try {
-      const user = await getUser();
-      if (!user) {
-        throw new Error("User not found");
-      }
-      const response = await fetch('/api/connectors/list?user_id=' + encodeURIComponent(user.id));
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
+  const setConnectorManager = async () => {
+    const user = await getUser();
+    if (!user) {
+      throw new Error("User not found");
+    }
+    connectorManager = new ConnectorManager(user.id);
+  }
 
-      setConnectors(data.connectors);
+  const fetchConnectors = async () => {
+    try {      
+      const connectors = await connectorManager.getConnectors();
+      setConnectors(connectors);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to fetch connectors');
     } finally {
@@ -47,15 +51,7 @@ export default function ConnectorsPage() {
     setError(null);
     
     try {
-      const response = await fetch('/api/connectors/auth', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ connectorId }),
-      });
-      
-      const data = await response.json();
+      const data = await connectorManager.connectConnector(connectorId);
       
       if (data.error) {
         throw new Error(data.error);
@@ -71,15 +67,11 @@ export default function ConnectorsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="text-center">Loading connectors...</div>
-      </div>
-    );
-  }
-
-  return (
+  return loading ? (  
+    <div className="flex items-center justify-center min-h-screen">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  ) : (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-6">Available Connectors</h1>
       
@@ -92,7 +84,15 @@ export default function ConnectorsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {connectors.map((connector) => (
           <Card key={connector.id} className="p-6">
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full items-center">
+
+              <Image 
+                src={`${logoPath}/${connector.connector_name}.svg`}
+                alt={connector.connector_display_name}
+                className="mb-4"
+                width={32}
+                height={32}
+              />
               <h2 className="text-lg font-semibold mb-4">
                 {connector.connector_display_name}
               </h2>

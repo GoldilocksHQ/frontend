@@ -1,7 +1,7 @@
 import { getUser } from "@/services/supabase/server";
 import { NextResponse } from "next/server";
 import { ConnectorService } from "@/services/api/connector-service";
-import { ConnectorsListResponse, ErrorResponse } from "@/lib/types";
+import { ErrorResponse } from "@/lib/types";
 
 export async function GET(request: Request) {
   try {
@@ -20,22 +20,18 @@ export async function GET(request: Request) {
       }
     }
 
-    // Get all connectors
-    const connectors = await connectorService.getAllConnectors();
-
-    // Get and enrich with user data if userId is provided
-    const userConnectors = userId 
-      ? await connectorService.getUserConnectors(userId)
-      : undefined;
-
-    const enrichedConnectors = await connectorService.mapUserActivatedConnectors(
-      connectors,
-      userConnectors
-    );
-
-    return NextResponse.json<ConnectorsListResponse>({
-      connectors: enrichedConnectors
-    });
+  
+    if (userId) {
+      const userConnectors = await connectorService.getUserConnectors(userId);
+      return NextResponse.json({
+        activatedConnectors: userConnectors
+      });
+    } else {
+      const connectors = await connectorService.getAllConnectors();
+      return NextResponse.json({
+        connectors: connectors
+      });
+    }
 
   } catch (error) {
     console.error('Error fetching connectors:', error);

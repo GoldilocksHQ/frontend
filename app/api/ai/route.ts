@@ -5,7 +5,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const { messages, model } = await req.json();
     

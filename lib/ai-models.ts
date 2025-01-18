@@ -5,15 +5,31 @@ export interface ChatResponse {
   role: string;
 }
 
+export const modelOptions = [
+  { value: "o1-mini", label: "o1-mini", provider: "OpenAI" },
+  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI' },
+  { value: 'gpt-4', label: 'GPT-4', provider: 'OpenAI' },
+]
+
 export class AIModel {
-  async chat(messages: Array<ChatCompletionMessageParam>, model: string = "o1-mini"): Promise<ChatResponse> {
+  private selectedModel: string;
+
+  constructor(selectedModel: string) {
+    this.selectedModel = selectedModel;
+  }
+
+  selectModel(model: string) {
+    this.selectedModel = model;
+  }
+
+  async chat(messages: Array<ChatCompletionMessageParam>): Promise<ChatResponse> {
     try {
       const response = await fetch('/api/ai', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ messages, model }),
+        body: JSON.stringify({ messages, model: this.selectedModel}),
       });
 
       if (!response.ok) {
