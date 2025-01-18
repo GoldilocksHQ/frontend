@@ -265,3 +265,28 @@ export async function tokenExists(credentials: Credentials): Promise<boolean> {
   const { success, credentials: updatedCredentials} = await getCredentials(credentials);
   return success && updatedCredentials !== null && updatedCredentials?.token !== null;
 }
+
+export async function queryDatabase(
+  schema: string = "api", 
+  table: string, 
+  columns: string, 
+  conditions?: Record<string, unknown>
+) : Promise<{success: boolean, data: unknown, error: string | null}> {
+  const supabase = await createClient();
+  let query = supabase
+    .schema(schema)
+    .from(table)
+    .select(columns);
+  
+  if (conditions) {
+    for (const [key, value] of Object.entries(conditions)) {
+      query = query.eq(key, value);
+    }
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    return {success: false, data: null, error: error.message};
+  }
+  return {success: true, data: data, error: null};
+}

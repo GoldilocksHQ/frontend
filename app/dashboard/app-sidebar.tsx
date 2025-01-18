@@ -1,4 +1,4 @@
-import { Home, User, Inbox, KeyRound } from "lucide-react"
+import { Home, User, Inbox, KeyRound, Plug } from "lucide-react"
 import {
   Sidebar,
   SidebarHeader,
@@ -18,6 +18,11 @@ const items = [
     title: "Home",
     url: "/dashboard",
     icon: Home,
+  },
+  {
+    title: "Connectors",
+    url: "/dashboard/connectors",
+    icon: Plug,
   },
   {
     title: "Playground",
