@@ -1,75 +1,74 @@
-import { Connector, UserConnector, UserMappedConnector } from "./types";
+import { Connector, ActivatedConnector, UserMappedConnector  } from "./types";
+import { APIKeyManager } from "./api-key-manager";
 
 
 export class ConnectorManager {
   private connectors: UserMappedConnector[] = [];
   private ready: Promise<void>;
-  constructor(userId: string) {
-    this.ready = this.loadMappedConnectorsList(userId);
+  private userId: string | undefined;
+  private apiKeyManager: APIKeyManager | undefined;
+  private headers: HeadersInit | undefined;
+
+  constructor() {
+    this.ready = this.initialize();
+  }
+
+  private async initialize() {
+    this.apiKeyManager = await APIKeyManager.getInstance();
+    this.userId = this.apiKeyManager?.getUserId();
+    this.headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': this.apiKeyManager?.getKey()
+    };
+    await this.loadMappedConnectorsList();
   }
 
   // Getters for connectors
-  async getConnectors() {
+  async getConnectors(): Promise<UserMappedConnector[]> {
     await this.ready;
     return this.connectors;
   }
 
-  async loadMappedConnectorsList(userId: string) {
+  async loadMappedConnectorsList() {
     const all_connectors = await this.loadAllConnectors();
-    const activated_connectors = await this.loadActivatedConnectors(userId);
+    const activated_connectors = await this.loadActivatedConnectors();
     this.connectors = this.mapUserActivatedConnectors(all_connectors, activated_connectors);
   }
 
   async loadAllConnectors() {
-    // call connectors/list api to get all connectors
-    const response = await fetch('/api/connectors/list',
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    const response = await fetch('/api/connectors/list', {
+      method: 'GET',
+      headers: this.headers,
+    });
     const data = await response.json();
     return data.connectors;
   }
   
-  async loadActivatedConnectors(userId: string) {
-    // call connectors/activated api to get all activated connectors
-    const response = await fetch(`/api/connectors/list?user_id=${userId}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+  async loadActivatedConnectors() {
+    const response = await fetch(`/api/connectors/list?user_id=${this.userId}`, {
+      method: 'GET',
+      headers: this.headers,
+    });
     const data = await response.json();
     return data.activatedConnectors;
   }
 
-  mapUserActivatedConnectors(connectors: Connector[], userConnectors?: UserConnector[]): UserMappedConnector[] {
-    if (!userConnectors) {
-      return connectors.map(connector => ({
-        ...connector,
-        is_connected: false
-      }));
-    }
-
-    const connectedIds = new Set(userConnectors.map(uc => uc.connector_id));
+  private mapUserActivatedConnectors(
+    connectors: Connector[], 
+    activatedConnectors: ActivatedConnector[]
+  ): UserMappedConnector[] {
+    const activatedIds = new Set(activatedConnectors.map(ac => ac.connector_id));
+    
     return connectors.map(connector => ({
       ...connector,
-      is_connected: connectedIds.has(connector.id)
+      is_connected: activatedIds.has(connector.id)
     }));
   }
 
   async connectConnector(connectorId: string) {
-    // call connectors/auth api to connect connector
     const response = await fetch('/api/connectors/auth', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      method: 'POST',
+      headers: this.headers,
       cache: 'no-store',
       body: JSON.stringify({ connectorId }),
     });

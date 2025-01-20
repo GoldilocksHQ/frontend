@@ -1,9 +1,10 @@
+import { withApiAuth } from '@/app/api/middleware';
 import { readValues, updateValues } from '@/connectors/google-sheets/connector';
 import { getUser } from '@/services/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { UUID } from 'crypto';
 
-export async function GET(req: NextRequest) {
+export const GET = withApiAuth(async (req: NextRequest) => {
   try {
     const searchParams = req.nextUrl.searchParams;
     let userId = searchParams.get('userId');
@@ -51,9 +52,9 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withApiAuth(async (req: NextRequest) => {
   try {
     // Get the body of the request
     const { spreadsheetId, range, values, userId: passedUserId} = await req.json();
@@ -100,4 +101,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

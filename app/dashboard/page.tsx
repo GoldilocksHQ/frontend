@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { createClient } from "@/services/supabase/client";
+import { getUser } from "@/services/supabase/server";
 import { User } from "@supabase/supabase-js";
-import { generateKey, getKey } from "../../services/supabase/server";
 import { CardApiKey } from "./card-api-key";
 import { Loader2 } from "lucide-react";
 import { useRouter } from 'next/navigation';
+import { APIKeyManager } from "../../lib/api-key-manager";
 
 export default function DashboardPage() {
   const [apiKey, setApiKey] = useState("");
@@ -13,38 +13,21 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const supabase = createClient();
+  const [, setApiKeyManager] = useState<APIKeyManager | null>(null);
 
   useEffect(() => {
     const initializeData = async () => {
       try {
-        // Get initial user
-        const {
-          data: { user: currentUser },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError) throw userError;
-        if (!currentUser) {
+        const user = await getUser();
+        if (!user) {
           router.push('/signin');
           return;
         }
-
-        setUser(currentUser);
-
-        // Get or generate API key
-        const { data: keyData, error: keyError } = await getKey(currentUser.id);
-        // if () throw keyError;
-
-        if (!keyData || keyError) {
-          const { data: newKey, error: genError } = await generateKey(currentUser.id);
-          if (genError) throw genError;
-          setApiKey(newKey?.[0]?.api_key || "");
-        } else {
-          setApiKey(keyData?.api_key || "");
-        }
-
-      } catch (error: unknown) {
+        setUser(user);
+        const apiKeyManager = await APIKeyManager.getInstance();
+        setApiKeyManager(apiKeyManager);
+        setApiKey(apiKeyManager.getKey());
+      } catch (error) {
         setError(error instanceof Error ? error.message : "An unknown error occurred");
       } finally {
         setLoading(false);
@@ -52,12 +35,7 @@ export default function DashboardPage() {
     };
 
     initializeData();
-
-    // Cleanup subscription
-    return () => {
-      supabase.auth.onAuthStateChange(() => {});
-    };
-  }, [router, supabase]);
+  }, [router]);
 
   if (error) {
     return <div className="text-red-500">Error: {error}</div>;

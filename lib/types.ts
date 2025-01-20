@@ -4,7 +4,7 @@ export interface Connector {
   connector_display_name: string;
 }
 
-export interface UserConnector {
+export interface ActivatedConnector {
   connector_id: string;
 }
 

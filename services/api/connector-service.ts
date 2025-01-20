@@ -1,5 +1,5 @@
 import { queryDatabase } from "../supabase/server";
-import { Connector, UserConnector} from "../../lib/types";
+import { Connector, ActivatedConnector} from "../../lib/types";
 
 export class ConnectorService {
   async getAllConnectors(): Promise<Connector[]> {
@@ -16,7 +16,7 @@ export class ConnectorService {
     return Array.isArray(data) ? data : [];
   }
 
-  async getUserConnectors(userId: string): Promise<UserConnector[]> {
+  async getUserConnectors(userId: string): Promise<ActivatedConnector[]> {
     const { success, data, error } = await queryDatabase(
       "api",
       "activated_connectors",

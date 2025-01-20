@@ -1,4 +1,5 @@
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { APIKeyManager } from "./api-key-manager";
 
 export interface ChatResponse {
   content: string;
@@ -15,10 +16,21 @@ export const modelOptions = [
 export class AIModel {
   private selectedModel: string;
   private selectedTools: Set<string>;
+  private apiKeyManager: APIKeyManager | null = null;
+  private headers: HeadersInit | undefined;
 
   constructor(selectedModel: string, selectedTools: Set<string> = new Set()) {
     this.selectedModel = selectedModel;
     this.selectedTools = selectedTools;
+    this.initialize();
+  }
+
+  private async initialize() {
+    this.apiKeyManager = await APIKeyManager.getInstance();
+    this.headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': this.apiKeyManager?.getKey()
+    };
   }
 
   selectModel(model: string) {
@@ -31,11 +43,13 @@ export class AIModel {
 
   async chat(messages: Array<ChatCompletionMessageParam>): Promise<ChatResponse> {
     try {
+      if (!this.apiKeyManager) {
+        await this.initialize();
+      }
+
       const response = await fetch('/api/ai', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.headers,
         body: JSON.stringify({
           messages,
           model: this.selectedModel,

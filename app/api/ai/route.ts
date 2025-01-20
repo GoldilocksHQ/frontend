@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleChatCompletion } from "@/services/api/ai-service";
 import { getUser } from "@/services/supabase/server";
+import { withApiAuth } from "@/app/api/middleware";
 
-export async function POST(req: NextRequest) {
+export const POST = withApiAuth(async (req: NextRequest) => {
   try {
     const user = await getUser();
     if (!user) {
@@ -17,4 +18,4 @@ export async function POST(req: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
-}
+});

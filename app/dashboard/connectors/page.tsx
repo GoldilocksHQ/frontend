@@ -32,7 +32,7 @@ export default function ConnectorsPage() {
     if (!user) {
       throw new Error("User not found");
     }
-    connectorManager = new ConnectorManager(user.id);
+    connectorManager = new ConnectorManager();
   }
 
   const fetchConnectors = async () => {

@@ -1,7 +1,12 @@
 import { type NextRequest } from 'next/server'
 import { updateSession } from '@/services/supabase/middleware'
 
+// For page routes only
 export async function middleware(request: NextRequest) {
+  // Skip API routes as they use their own auth
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return;
+  }
   return await updateSession(request)
 }
 

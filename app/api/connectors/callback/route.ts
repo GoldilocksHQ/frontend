@@ -1,7 +1,8 @@
+import { withApiAuth } from '@/app/api/middleware';
 import { exchangeCodeForTokens, storeGoogleTokens } from '@/connectors/google-sheets/connector';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest) {
+export const GET = withApiAuth(async (req: NextRequest) => {
   try {
     const searchParams = req.nextUrl.searchParams;
     const code = searchParams.get('code');
@@ -10,13 +11,13 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       console.error('Google auth error:', error);
-      return Response.redirect(
+      return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?error=google_${error}`
       );
     }
 
     if (!code || !state) {
-      return Response.redirect(
+      return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?error=missing_params`
       );
     }
@@ -25,21 +26,21 @@ export async function GET(req: NextRequest) {
     const {success: storeSuccess, error: storeError} = await storeGoogleTokens(tokens, state);
     if (!storeSuccess) {
       console.error('Error storing tokens:', storeError);
-      return Response.redirect(
+      return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?error=tokens_not_stored`
       );
     }
 
     // Redirect back to dashboard with success
-    return Response.redirect(
+    return NextResponse.redirect(
       process.env.NEXT_PUBLIC_APP_URL!
     );
   } catch (error) {
     console.error('Google callback error:', error);
-    return Response
+    return NextResponse
     .redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?error=auth_failed`,
       302
     );
   }
-}
+});

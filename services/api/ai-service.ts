@@ -112,7 +112,7 @@ export async function handleChatCompletion(
 }
 
 async function getToolDefinitions(connectorIds: string[]): Promise<ToolDefinition[]> {
-  console.log(connectorIds);
+  console.log(`Getting tool definitions for connectors: ${connectorIds}`);
   return [
     {
       connector: {
@@ -236,8 +236,11 @@ async function executeFunctionCall(
 ) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.GODILOCKS_API_KEY!
+    };
     
-    // Match the entire function name instead of splitting
     if (functionName === 'google-sheets_read_sheet') {
       const url = new URL(`${baseUrl}/api/connectors`);
       url.searchParams.set('spreadsheetId', args.spreadsheetId as string);
@@ -245,7 +248,7 @@ async function executeFunctionCall(
       if (userId) {
         url.searchParams.set('userId', userId);
       }
-      const response = await fetch(url);
+      const response = await fetch(url, { headers });
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -260,7 +263,7 @@ async function executeFunctionCall(
     if (functionName === 'google-sheets_update_sheet') {
       const response = await fetch(`${baseUrl}/api/connectors`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         cache: 'no-store',
         body: JSON.stringify({
           spreadsheetId: args.spreadsheetId,

@@ -1,9 +1,10 @@
-import { getUser } from '@/services/supabase/server';
+import { withApiAuth } from '@/app/api/middleware';
 import { getAuthUrl } from '@/connectors/google-sheets/connector';
+import { getUser } from '@/services/supabase/server';
 import { NextResponse } from 'next/server';
 import { UUID } from 'crypto';
 
-export async function GET() {
+export const POST = withApiAuth(async () => {
   try {
     const user = await getUser();
     if (!user) {
@@ -22,4 +23,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});

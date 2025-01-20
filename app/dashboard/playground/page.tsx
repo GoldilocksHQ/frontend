@@ -17,17 +17,23 @@ import { ChatCompletionMessageParam } from "openai/resources/chat/completions.mj
 
 export default function PlaygroundPage() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
+  const [,setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [connectors, setConnectors] = useState<UserMappedConnector[]>([]);
   const [selectedModelValue, setSelectedModel] = useState(modelOptions[0].value);
   const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [aiModel] = useState(() => new AIModel(modelOptions[0].value));
-  
+  const [aiModel, setAiModel] = useState<AIModel | null>(null);
+  let connectorManager: ConnectorManager;
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetchConnectors();
+  useEffect(() => { 
+    const initializeConnectorsAndModel = async () => {
+      await setConnectorManager();
+      await fetchConnectors();  
+      await setAiModel(new AIModel(modelOptions[0].value));
+    };
+    initializeConnectorsAndModel();
   }, []);
 
   useEffect(() => {
@@ -37,20 +43,26 @@ export default function PlaygroundPage() {
   }, [messages]);
 
   useEffect(() => {
-    aiModel.selectModel(selectedModelValue);
-    aiModel.setTools(selectedConnectors);
+    aiModel?.selectModel(selectedModelValue);
+    aiModel?.setTools(selectedConnectors);
   }, [selectedModelValue, selectedConnectors, aiModel]);
 
+  const setConnectorManager = async () => {
+    const user = await getUser();
+    if (!user) {
+      throw new Error("User not found");
+    }
+    connectorManager = new ConnectorManager();
+  }
+
   const fetchConnectors = async () => {
-    try {
-      const user = await getUser();
-      if (!user) throw new Error("User not found");
-      
-      const connectorManager = new ConnectorManager(user.id);
-      const fetchedConnectors = await connectorManager.getConnectors();
-      setConnectors(fetchedConnectors);
+    try {      
+      const connectors = await connectorManager?.getConnectors();
+      if (connectors) {
+        setConnectors(connectors);
+      }
     } catch (error) {
-      console.error('Failed to fetch connectors:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch connectors');
     } finally {
       setLoading(false);
     }
@@ -77,11 +89,13 @@ export default function PlaygroundPage() {
     setMessages(currentMessages);
     setInput("");
     try {
-      const response = await aiModel.chat(currentMessages as ChatCompletionMessageParam[]);
-      setMessages([...currentMessages, { 
-        role: response.role, 
-        content: response.content 
-      }]);
+      const response = await aiModel?.chat(currentMessages as ChatCompletionMessageParam[]);
+      if (response) {
+        setMessages([...currentMessages, { 
+          role: response.role, 
+          content: response.content 
+        }]);
+      }
     } catch (error) {
       console.error(error);
     }

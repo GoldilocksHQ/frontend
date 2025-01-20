@@ -1,11 +1,12 @@
+import { withApiAuth } from '@/app/api/middleware';
 import { getUser } from "@/services/supabase/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ConnectorService } from "@/services/api/connector-service";
 import { ErrorResponse } from "@/lib/types";
 
-export async function GET(request: Request) {
+export const GET = withApiAuth(async (req: NextRequest) => {
   try {
-    const { searchParams } = new URL(request.url);
+    const searchParams = req.nextUrl.searchParams;
     const userId = searchParams.get('user_id');
     const connectorService = new ConnectorService();
 
@@ -40,4 +41,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
+});
