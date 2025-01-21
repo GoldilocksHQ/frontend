@@ -12,9 +12,9 @@ import { Loader2 } from "lucide-react";
 
 export default function ConnectorsPage() {
   const [connectors, setConnectors] = useState<UserMappedConnector[]>([]);
+  const [selectedConnector, setSelectedConnector] = useState<UserMappedConnector | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [connectingId, setConnectingId] = useState<string | null>(null);
   const logoPath = path.join("../../", "logos");
   const [connectorManager, setConnectorManager] = useState<ConnectorManager | null>(null);
 
@@ -36,12 +36,11 @@ export default function ConnectorsPage() {
     }
   };
 
-  const handleConnect = async (connectorId: string) => {
-    setConnectingId(connectorId);
+  const handleConnect = async (connector: UserMappedConnector) => {
     setError(null);
-    
+    setSelectedConnector(connector);
     try {
-      const data = await connectorManager?.connectConnector(connectorId);
+      const data = await connectorManager?.connectConnector(connector);
       
       if (data?.error) {
         throw new Error(data.error);
@@ -53,7 +52,7 @@ export default function ConnectorsPage() {
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to connect');
     } finally {
-      setConnectingId(null);
+      setSelectedConnector(null);
     }
   };
 
@@ -77,24 +76,24 @@ export default function ConnectorsPage() {
             <div className="flex flex-col h-full items-center">
 
               <Image 
-                src={`${logoPath}/${connector.connector_name}.svg`}
-                alt={connector.connector_display_name}
-                className="mb-4"
-                width={32}
-                height={32}
+                src={`${logoPath}/${connector.connectorName}.svg`}
+                alt={`${connector.connectorDisplayName} thumbnail`}
+                className="mb-4 w-16 h-16"
+                width={16}
+                height={16}
               />
               <h2 className="text-lg font-semibold mb-4">
-                {connector.connector_display_name}
+                {connector.connectorDisplayName}
               </h2>
               
               <div className="mt-auto">
                 <Button
                   className="w-full"
-                  disabled={connector.is_connected || connectingId === connector.id}
-                  variant={connector.is_connected ? "secondary" : "default"}
-                  onClick={() => handleConnect(connector.id)}
+                  disabled={connector.isConnected || selectedConnector?.id === connector.id}
+                  variant={connector.isConnected ? "secondary" : "default"}
+                  onClick={() => handleConnect(connector)}
                 >
-                  {connectingId === connector.id ? (
+                  {selectedConnector?.id === connector.id ? (
                     <>
                       <svg className="animate-spin -ml-1 mr-2 h-4 w-4" viewBox="0 0 24 24">
                         <circle 
@@ -113,7 +112,7 @@ export default function ConnectorsPage() {
                       </svg>
                       Connecting...
                     </>
-                  ) : connector.is_connected ? (
+                  ) : connector.isConnected ? (
                     "Connected"
                   ) : (
                     "Connect"

@@ -40,15 +40,17 @@ export class ConnectorManager {
   async loadMappedConnectorsList() {
     const all_connectors = await this.loadAllConnectors();
     const activated_connectors = await this.loadActivatedConnectors();
-    this.connectors = await this.mapUserActivatedConnectors(all_connectors, activated_connectors);
+    this.connectors = this.mapUserActivatedConnectors(all_connectors, activated_connectors);
   }
 
-  async loadAllConnectors() {
+  async loadAllConnectors(): Promise<Connector[]> {
     const response = await fetch('/api/connectors/list', {
       method: 'GET',
       headers: this.headers,
     });
     const data = await response.json();
+
+    
     return data.connectors;
   }
   
@@ -65,20 +67,25 @@ export class ConnectorManager {
     connectors: Connector[], 
     activatedConnectors: ActivatedConnector[]
   ): UserMappedConnector[] {
-    const activatedIds = new Set(activatedConnectors.map(ac => ac.connector_id));
+    const activatedIds = new Set(activatedConnectors.map(ac => ac.connectorId));
     
     return connectors.map(connector => ({
       ...connector,
-      is_connected: activatedIds.has(connector.id)
+      isConnected: activatedIds.has(connector.id)
     }));
   }
 
-  async connectConnector(connectorId: string) {
+  async connectConnector(connector: UserMappedConnector) {
+    const connectorName = connector.connectorName;
+    const userId = this.userId;
+    if (!userId) {
+      throw new Error("User ID not found");
+    }
     const response = await fetch('/api/connectors/auth', {
       method: 'POST',
       headers: this.headers,
       cache: 'no-store',
-      body: JSON.stringify({ connectorId }),
+      body: JSON.stringify({ connectorName, userId }),
     });
     const data = await response.json();
     return data;

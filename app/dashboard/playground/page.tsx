@@ -28,7 +28,7 @@ import {
 } from "@/lib/agent-manager";
 import { UserMappedConnector } from "@/lib/types";
 import { ConnectorManager } from "@/lib/connector-manager";
-import { Loader2, Plus, Trash2, ArrowLeft } from "lucide-react";
+import { Loader2, Plus, Trash2, ArrowLeft, RefreshCw } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -57,6 +57,8 @@ export default function PlaygroundPage() {
   const [, setError] = useState<string | null>(null);
   const [, setConnectorManager] = useState<ConnectorManager | null>(null);
   const [agentManager, setAgentManager] = useState<AgentManager | null>(null);
+  const [isWorking, setIsWorking] = useState(false);
+  const [workingStatus, setWorkingStatus] = useState<string>("");
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -71,7 +73,7 @@ export default function PlaygroundPage() {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
-  }, [messages]);  
+  }, [messages]);
   
   const initializeConnectorsAndAgents = async () => {
     try {
@@ -80,8 +82,10 @@ export default function PlaygroundPage() {
       setConnectorManager(manager);
       const fetchedConnectors = await manager.getConnectors();
       setConnectors(fetchedConnectors);
-      const agentMgr = await AgentManager.getInstance();
-      setAgentManager(agentMgr);
+      const agentManager = await AgentManager.getInstance();
+      setAgentManager(agentManager);
+      loadAgents(agentManager);
+      setAgents(agentManager.agents);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Initialization failed");
     } finally {
@@ -99,13 +103,15 @@ export default function PlaygroundPage() {
       "Default system prompt",
       new Set()
     );
-    agentManager.createAgent(newAgent);
-    setAgents([...agents, newAgent]);
+    await agentManager.createAgent(newAgent);
+    saveAgent(newAgent);
+    setAgents([...agentManager.agents]);
   };
 
   const handleDeleteAgent = (agent: Agent) => {
     if (!agentManager) return;
     agentManager.deleteAgent(agent);
+    localStorage.removeItem(`agent-${agent.agentName}`);
     setAgents(agents.filter((a) => a !== agent));
     if (selectedAgent === agent) {
       setSelectedAgent(null);
@@ -127,6 +133,7 @@ export default function PlaygroundPage() {
     selectedAgent.setTools(selectedConnectors);
     selectedAgent.setSystemPrompt(systemPrompt);
     setAgents([...agents]); // Trigger re-render
+    saveAgent(selectedAgent);
     toast({
       title: "Configuration saved",
       description: "Agent settings have been updated successfully.",
@@ -145,14 +152,28 @@ export default function PlaygroundPage() {
     });
   };
 
+  const handleClearMessages = () => {
+    if (!selectedAgent) return;
+    selectedAgent.messages = [];
+    setMessages([]);
+    saveAgent(selectedAgent);
+    toast({
+      title: "Messages cleared",
+      description: "All messages have been cleared.",
+    });
+  };
+
   const handleSend = async () => {
     if (!input.trim() || !agentManager || !selectedAgent) return;
 
     const userMessage = { role: "user", content: input };
     selectedAgent.addMessage(userMessage);
-    setMessages([...selectedAgent.messages]); // Create a new array to trigger re-render
+    setMessages([...selectedAgent.messages]);
     setInput("");
-
+    
+    setIsWorking(true);
+    setWorkingStatus("Thinking...");
+    
     try {
       const response = await agentManager?.chat(selectedAgent!);
       if (response) {
@@ -160,16 +181,42 @@ export default function PlaygroundPage() {
           role: response.role,
           content: response.content,
         });
-        setMessages([...selectedAgent.messages]); // Create a new array to trigger re-render
+        setMessages([...selectedAgent.messages]);
+        saveAgent(selectedAgent);
       }
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Failed to send message"
       );
+      selectedAgent.addMessage({
+        role: "assistant",
+        content: "Sorry, I encountered an error while processing your request.",
+      });
+      setMessages([...selectedAgent.messages]);
+    } finally {
+      setIsWorking(false);
+      setWorkingStatus("");
     }
   };
 
-  const activatedConnectors = connectors.filter((c) => c.is_connected);
+  const saveAgent = (agent: Agent) => {
+    localStorage.setItem(`agent-${agent.agentName}`, JSON.stringify(agent));
+  };
+
+  const loadAgents = (agentManager: AgentManager) => {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('agent-')) {
+        const agentData = localStorage.getItem(key);
+        if (agentData) {
+          const agentJSON = JSON.parse(agentData);
+          agentManager.createAgent(Agent.fromJSON(agentJSON));
+        }
+      }
+    }
+  };
+
+  const activatedConnectors = connectors.filter((c) => c.isConnected);
 
   if (loading) {
     return (
@@ -294,14 +341,14 @@ export default function PlaygroundPage() {
                             }`}
                         >
                           <Image 
-                            src={`/logos/${connector.connector_name}.svg`}
-                            alt={connector.connector_display_name}
+                            src={`/logos/${connector.connectorName}.svg`}
+                            alt={connector.connectorDisplayName}
                             width={15}
                             height={15}
                             className="mr-2"
                           />
                           <span className="text-sm truncate">
-                            {connector.connector_display_name}
+                            {connector.connectorDisplayName}
                           </span>
                         </button>
                       ))}
@@ -322,13 +369,23 @@ export default function PlaygroundPage() {
           <Card className="flex-1 h-[750px] flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle>Chat with {selectedAgent.agentName}</CardTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSelectedAgent(null)}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleClearMessages}
+                  title="Clear messages"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedAgent(null)}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col h-full overflow-hidden">
               <ScrollArea className="flex-1 pr-4" ref={scrollAreaRef}>
@@ -364,6 +421,21 @@ export default function PlaygroundPage() {
                       </div>
                     </div>
                   ))}
+                  {isWorking && (
+                    <div className="flex justify-start">
+                      <div className="flex items-start">
+                        <Avatar className="w-8 h-8">
+                          <AvatarFallback>A</AvatarFallback>
+                        </Avatar>
+                        <div className="mx-2 p-3 rounded-lg bg-muted">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <p className="text-sm">{workingStatus}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
               <div className="flex items-center space-x-2 mt-4">

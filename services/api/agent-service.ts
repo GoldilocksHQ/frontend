@@ -100,9 +100,9 @@ async function getToolDefinitions(connectorIds: string[]): Promise<ToolDefinitio
     {
       connector: {
         id: "google-sheets",
-        connector_name: "google-sheets",
-        connector_display_name: "Google Sheets",
-        is_connected: true
+        connectorName: "google-sheets",
+        connectorDisplayName: "Google Sheets",
+        isConnected: true
       },
       functions: [
         {
@@ -222,7 +222,7 @@ async function setUpTools(tools: ToolDefinition[]) {
       ...tool.functions.map(func => ({
         type: "function" as const,
         function: {
-          name: `${tool.connector.connector_name}_${func.name}`,
+          name: `${tool.connector.connectorName}_${func.name}`,
           description: func.description,
           parameters: func.parameters as OpenAI.FunctionParameters,
         }
@@ -231,7 +231,7 @@ async function setUpTools(tools: ToolDefinition[]) {
     responseFormat: [
       ...acc.responseFormat,
       ...tool.functions.map(func => ({
-        function_name: `${tool.connector.connector_name}_${func.name}`,
+        function_name: `${tool.connector.connectorName}_${func.name}`,
         json_schema: func.response_schema as OpenAI.ResponseFormatJSONSchema
       }))
     ]

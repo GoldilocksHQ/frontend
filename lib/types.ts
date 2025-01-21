@@ -1,18 +1,18 @@
 export interface Connector {
   id: string;
-  connector_name: string;
-  connector_display_name: string;
+  connectorName: string;
+  connectorDisplayName: string;
 }
 
 export interface ActivatedConnector {
-  connector_id: string;
+  connectorId: string;
 }
 
 export interface UserMappedConnector{
   id: string;
-  connector_name: string;
-  connector_display_name: string;
-  is_connected: boolean;
+  connectorName: string;
+  connectorDisplayName: string;
+  isConnected: boolean;
 }
 
 export interface ErrorResponse {

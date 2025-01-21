@@ -18,6 +18,15 @@ export const modelOptions: ModelOption[] = [
   { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI' },
 ]
 
+export interface AgentJSON {
+  agentName: string;
+  agentDescription: string;
+  selectedModel: ModelOption;
+  systemPrompt: string;
+  selectedTools: string[];
+  messages: Array<{role: string, content: string}>;
+}
+
 export class AgentManager {
   private static instance: AgentManager | null = null;
   private apiKeyManager: APIKeyManager | null = null;
@@ -92,6 +101,29 @@ export class Agent {
     this.systemPrompt = systemPrompt;
     this.selectedTools = selectedTools;
     this.messages = [];
+  }
+
+  toJSON(): AgentJSON {
+    return {
+      agentName: this.agentName,
+      agentDescription: this.agentDescription,
+      selectedModel: this.selectedModel,
+      systemPrompt: this.systemPrompt,
+      selectedTools: Array.from(this.selectedTools),
+      messages: this.messages
+    };
+  }
+
+  static fromJSON(json: AgentJSON): Agent {
+    const agent = new Agent(
+      json.agentName,
+      json.agentDescription,
+      json.selectedModel,
+      json.systemPrompt,
+      new Set(json.selectedTools)
+    );
+    agent.messages = json.messages || [];
+    return agent;
   }
 
   editName(name: string) {

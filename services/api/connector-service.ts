@@ -21,7 +21,13 @@ export class ConnectorService {
       throw new Error(error || "Failed to fetch connectors");
     }
 
-    return Array.isArray(data) ? data : [];
+    const connectors = Array.isArray(data) ? data.map((connector: Record<string, string>) => ({
+      id: connector.id,
+      connectorName: connector.connector_name,
+      connectorDisplayName: connector.connector_display_name
+    })) : [];
+    
+    return connectors;
   }
 
   async getUserConnectors(userId: string): Promise<ActivatedConnector[]> {
@@ -36,7 +42,11 @@ export class ConnectorService {
       throw new Error(error || "Failed to fetch user connectors");
     }
 
-    return Array.isArray(data) ? data : [];
+    const connectors = Array.isArray(data) ? data.map((connector: Record<string, string>) => ({
+      connectorId: connector.connector_id
+    })) : [];
+    
+    return connectors;
   }
 
   async executeFunction(userId: UUID, func: ConnectorFunction) {
