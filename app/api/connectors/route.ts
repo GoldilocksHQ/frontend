@@ -1,6 +1,6 @@
 import { withApiAuth } from '@/app/api/middleware';
 import { readValues, updateValues } from '@/connectors/google-sheets/connector';
-import { getUser } from '@/services/supabase/server';
+import { getUser } from '@/services/supabase/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { UUID } from 'crypto';
 

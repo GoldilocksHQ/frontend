@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getUser } from "@/services/supabase/server";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { UserMappedConnector } from "@/lib/types";
@@ -17,30 +16,21 @@ export default function ConnectorsPage() {
   const [error, setError] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const logoPath = path.join("../../", "logos");
-  let connectorManager: ConnectorManager;
+  const [connectorManager, setConnectorManager] = useState<ConnectorManager | null>(null);
 
   useEffect(() => {
-    const initializeConnectors = async () => {
-      await setConnectorManager();
-      await fetchConnectors();  
-    };
     initializeConnectors();
   }, []);
 
-  const setConnectorManager = async () => {
-    const user = await getUser();
-    if (!user) {
-      throw new Error("User not found");
-    }
-    connectorManager = new ConnectorManager();
-  }
-
-  const fetchConnectors = async () => {
-    try {      
-      const connectors = await connectorManager.getConnectors();
-      setConnectors(connectors);
+  const initializeConnectors = async () => {
+    try {
+      setLoading(true);
+      const manager = await ConnectorManager.getInstance();
+      setConnectorManager(manager);
+      const fetchedConnectors = await manager.getConnectors();
+      setConnectors(fetchedConnectors);
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to fetch connectors');
+      setError(error instanceof Error ? error.message : "Initialization failed");
     } finally {
       setLoading(false);
     }
@@ -51,9 +41,9 @@ export default function ConnectorsPage() {
     setError(null);
     
     try {
-      const data = await connectorManager.connectConnector(connectorId);
+      const data = await connectorManager?.connectConnector(connectorId);
       
-      if (data.error) {
+      if (data?.error) {
         throw new Error(data.error);
       }
 

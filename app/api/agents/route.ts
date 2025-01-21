@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleChatCompletion } from "@/services/api/ai-service";
-import { getUser } from "@/services/supabase/server";
+import { handleChatCompletion } from "@/services/api/agent-service";
+import { getUser } from '@/services/supabase/client';
 import { withApiAuth } from "@/app/api/middleware";
 
 export const POST = withApiAuth(async (req: NextRequest) => {

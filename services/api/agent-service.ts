@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { UserMappedConnector } from '@/lib/types';
-import { getKey } from '../supabase/server';
+import { getKey } from '../supabase/client';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -26,29 +26,7 @@ export async function handleChatCompletion(
 ) {
   try {
     const tools = selectedTools ? await getToolDefinitions(selectedTools) : undefined;
-    const { aiTools, responseFormat } = tools?.reduce<{
-      aiTools: ChatCompletionTool[];
-      responseFormat: { function_name: string; json_schema: OpenAI.ResponseFormatJSONSchema }[];
-    }>((acc, tool) => ({
-      aiTools: [
-        ...acc.aiTools,
-        ...tool.functions.map(func => ({
-          type: "function" as const,
-          function: {
-            name: `${tool.connector.connector_name}_${func.name}`,
-            description: func.description,
-            parameters: func.parameters as OpenAI.FunctionParameters,
-          }
-        }))
-      ],
-      responseFormat: [
-        ...acc.responseFormat,
-        ...tool.functions.map(func => ({
-          function_name: `${tool.connector.connector_name}_${func.name}`,
-          json_schema: func.response_schema as OpenAI.ResponseFormatJSONSchema
-        }))
-      ]
-    }), { aiTools: [], responseFormat: [] }) ?? { aiTools: [], responseFormat: [] };
+    const {agentTools, responseFormat} = await setUpTools(tools!);
 
     const fullMessages = [
       { role: "system", content: systemPrompt || "" },
@@ -57,16 +35,16 @@ export async function handleChatCompletion(
     const completion = await openai.chat.completions.create({
       messages: fullMessages as ChatCompletionMessageParam[],
       model: model || "gpt-4o-mini",
-      tools: aiTools,
+      tools: agentTools,
       tool_choice: "auto",
     });
 
-    const message = completion.choices[0]?.message;
+    const firstResponse = completion.choices[0]?.message;
 
     // Handle function calls if present
-    if (message?.tool_calls) {
+    if (firstResponse?.tool_calls) {
       const results = await Promise.all(
-        message.tool_calls.map(async tool_call => {
+        firstResponse.tool_calls.map(async tool_call => {
           const functionName = tool_call.function.name;
           const functionArgs = JSON.parse(tool_call.function.arguments);
           
@@ -89,26 +67,26 @@ export async function handleChatCompletion(
       );
 
       // Ensure all tool_call_ids have corresponding results
-      if (results.length !== message.tool_calls.length) {
+      if (results.length !== firstResponse.tool_calls.length) {
         throw new Error('Mismatch between tool_calls and results');
       }
 
       // Get a new completion with the function results
-      const newCompletion = await openai.chat.completions.create({
-        messages: [...messages, message, ...results] as ChatCompletionMessageParam[],
+      const secondResponse = await openai.chat.completions.create({
+        messages: [...messages, firstResponse, ...results] as ChatCompletionMessageParam[],
         model: model || "gpt-4o-mini",
-        response_format: responseFormat.find(rf => rf.function_name === message.tool_calls?.[0].function.name)?.json_schema as OpenAI.ResponseFormatJSONSchema
+        response_format: responseFormat.find(rf => rf.function_name === firstResponse.tool_calls?.[0].function.name)?.json_schema as OpenAI.ResponseFormatJSONSchema
       });
 
       return {
-        content: newCompletion.choices[0]?.message?.content || '',
-        role: newCompletion.choices[0]?.message?.role || 'assistant',
+        content: secondResponse.choices[0]?.message?.content || '',
+        role: secondResponse.choices[0]?.message?.role || 'assistant',
       };
     }
 
     return {
-      content: message?.content || '',
-      role: message?.role || 'assistant',
+      content: firstResponse?.content || '',
+      role: firstResponse?.role || 'assistant',
     };
 
   } catch (error) {
@@ -233,6 +211,34 @@ async function getToolDefinitions(connectorIds: string[]): Promise<ToolDefinitio
       ]
     }
   ];
+}
+
+async function setUpTools(tools: ToolDefinition[]) {
+  const { agentTools, responseFormat } = tools?.reduce<{
+    agentTools: ChatCompletionTool[];
+    responseFormat: { function_name: string; json_schema: OpenAI.ResponseFormatJSONSchema }[];
+  }>((acc, tool) => ({
+    agentTools: [
+      ...acc.agentTools,
+      ...tool.functions.map(func => ({
+        type: "function" as const,
+        function: {
+          name: `${tool.connector.connector_name}_${func.name}`,
+          description: func.description,
+          parameters: func.parameters as OpenAI.FunctionParameters,
+        }
+      }))
+    ],
+    responseFormat: [
+      ...acc.responseFormat,
+      ...tool.functions.map(func => ({
+        function_name: `${tool.connector.connector_name}_${func.name}`,
+        json_schema: func.response_schema as OpenAI.ResponseFormatJSONSchema
+      }))
+    ]
+  }), { agentTools: [], responseFormat: [] }) ?? { agentTools: [], responseFormat: [] };
+
+  return {agentTools, responseFormat};
 }
 
 async function executeFunctionCall(

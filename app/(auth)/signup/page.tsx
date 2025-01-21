@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState } from "react";
-import { signUp } from "@/services/supabase/server";
+import { signUp } from '@/services/supabase/client';
 import { useRouter } from "next/navigation";
 
 const formSchema = z.object({

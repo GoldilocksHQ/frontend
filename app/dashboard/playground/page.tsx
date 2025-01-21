@@ -28,7 +28,6 @@ import {
 } from "@/lib/agent-manager";
 import { UserMappedConnector } from "@/lib/types";
 import { ConnectorManager } from "@/lib/connector-manager";
-import { getUser } from "@/services/supabase/server";
 import { Loader2, Plus, Trash2, ArrowLeft } from "lucide-react";
 import {
   Tooltip,
@@ -56,32 +55,40 @@ export default function PlaygroundPage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [, setError] = useState<string | null>(null);
+  const [connectorManager, setConnectorManager] = useState<ConnectorManager | null>(null);
   const [agentManager, setAgentManager] = useState<AgentManager | null>(null);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  let connectorManager: ConnectorManager;
 
   const { toast } = useToast();
 
-  const initAgentManager = async () => {
-    const manager = await AgentManager.getInstance();
-    setAgentManager(manager);
-  };
+  
 
   useEffect(() => {
-    const initializeConnectors = async () => {
-      await setConnectorManager();
-      await fetchConnectors();
-      await initAgentManager();
-    };
-    initializeConnectors();
+    initializeConnectorsAndAgents();
   }, []);
-
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+  
+    useEffect(() => {
+      if (scrollAreaRef.current) {
+        scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+      }
+    }, [messages]);  
+  
+  const initializeConnectorsAndAgents = async () => {
+    try {
+      setLoading(true);
+      const manager = await ConnectorManager.getInstance();
+      setConnectorManager(manager);
+      const fetchedConnectors = await manager.getConnectors();
+      setConnectors(fetchedConnectors);
+      const agentMgr = await AgentManager.getInstance();
+      setAgentManager(agentMgr);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Initialization failed");
+    } finally {
+      setLoading(false);
     }
-  }, [messages]);  
+  };
 
   const handleAddAgent = async () => {
     if (!agentManager) return;
@@ -125,30 +132,6 @@ export default function PlaygroundPage() {
       title: "Configuration saved",
       description: "Agent settings have been updated successfully.",
     });
-  };
-
-  const setConnectorManager = async () => {
-    const user = await getUser();
-    if (!user) {
-      throw new Error("User not found");
-    }
-    connectorManager = new ConnectorManager();
-  };
-
-  const fetchConnectors = async () => {
-    try {
-      if (!connectorManager) {
-        throw new Error("Connector manager not initialized");
-      }
-      const connectors = await connectorManager.getConnectors();
-      setConnectors(connectors);
-    } catch (error) {
-      setError(
-        error instanceof Error ? error.message : "Failed to fetch connectors"
-      );
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleToggleConnector = (connectorId: string) => {

@@ -3,14 +3,22 @@ import { APIKeyManager } from "./api-key-manager";
 
 
 export class ConnectorManager {
+  private static instance: ConnectorManager;
   private connectors: UserMappedConnector[] = [];
   private ready: Promise<void>;
   private userId: string | undefined;
   private apiKeyManager: APIKeyManager | undefined;
   private headers: HeadersInit | undefined;
 
-  constructor() {
+  private constructor() {
     this.ready = this.initialize();
+  }
+
+  public static async getInstance() {
+    if (!ConnectorManager.instance) {
+      ConnectorManager.instance = new ConnectorManager();
+    }
+    return ConnectorManager.instance;
   }
 
   private async initialize() {

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { signOut } from "@/services/supabase/server";
+import { signOut } from '@/services/supabase/client';
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";

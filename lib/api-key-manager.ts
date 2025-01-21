@@ -1,6 +1,7 @@
 "user client"
 
-import { generateKey, getKey, getUser } from "@/services/supabase/server";
+import { generateKey, getKey } from '@/services/supabase/client';
+import { getUser } from '@/services/supabase/client';
 
 export class APIKeyManager {
   private static instance: APIKeyManager | null = null;

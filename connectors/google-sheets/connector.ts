@@ -1,7 +1,9 @@
+"user server"
+
 import { type Credentials as GoogleCredentials, OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
 import { sheets_v4 } from 'googleapis/build/src/apis/sheets';
-import { storeCredentials, getCredentials, type Credentials as SupabaseCredentials, tokenExists, updateCredentials } from '@/services/supabase/server';
+import { storeCredentials, getCredentials, type Credentials as SupabaseCredentials, tokenExists, updateCredentials } from '../../services/supabase/server';
 import { UUID } from 'crypto';
 import { isTokenExpired } from '@/lib/utils';
 

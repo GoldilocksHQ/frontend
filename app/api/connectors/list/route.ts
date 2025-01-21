@@ -1,5 +1,5 @@
 import { withApiAuth } from '@/app/api/middleware';
-import { getUser } from "@/services/supabase/server";
+import { getUser } from '@/services/supabase/client';
 import { NextRequest, NextResponse } from "next/server";
 import { ConnectorService } from "@/services/api/connector-service";
 import { ErrorResponse } from "@/lib/types";
