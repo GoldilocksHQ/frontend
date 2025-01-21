@@ -71,6 +71,7 @@ export class AgentManager {
           messages: agent.messages,
           systemPrompt: agent.systemPrompt,
           selectedTools: Array.from(agent.selectedTools),
+          userId: this.apiKeyManager?.getUserId()
         }),
       });
 
@@ -83,7 +84,6 @@ export class AgentManager {
       throw new Error(error instanceof Error ? error.message : 'Chat request failed');
     }
   }
-  
 }
 
 export class Agent {
@@ -94,7 +94,13 @@ export class Agent {
   public selectedTools: Set<string>;
   public messages: Array<{role: string, content: string}>;
   
-  constructor(agentName: string, agentDescription: string, selectedModel: ModelOption, systemPrompt: string, selectedTools: Set<string>) {
+  constructor(
+    agentName: string,
+    agentDescription: string,
+    selectedModel: ModelOption,
+    systemPrompt: string,
+    selectedTools: Set<string>
+  ) {
     this.agentName = agentName;
     this.agentDescription = agentDescription;
     this.selectedModel = selectedModel;

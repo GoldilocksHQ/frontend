@@ -1,6 +1,7 @@
 import { queryDatabase } from "../supabase/server";
 import { Connector, ActivatedConnector } from "../../lib/types";
-import { readValues, updateValues } from "@/connectors/google-sheets/connector";
+import { handleFunction as handleGoogleSheetsFunction } from "@/connectors/google-sheets/connector";
+import { handleFunction as handleGoogleDriveFunction } from "@/connectors/google-drive/connector";
 import { UUID } from "crypto";
 
 export interface ConnectorFunction {
@@ -52,25 +53,11 @@ export class ConnectorService {
   async executeFunction(userId: UUID, func: ConnectorFunction) {
     switch (func.connector) {
       case 'google-sheets':
-        return this.executeGoogleSheetsFunction(userId, func);
+        return handleGoogleSheetsFunction(userId, func.function, func.arguments);
+      case 'google-drive':
+        return handleGoogleDriveFunction(userId, func.function, func.arguments);
       default:
         throw new Error(`Unknown connector: ${func.connector}`);
-    }
-  }
-
-  private async executeGoogleSheetsFunction(userId: UUID, func: ConnectorFunction) {
-    switch (func.function) {
-      case 'readSheet':
-        const { spreadsheetId, range } = func.arguments as { spreadsheetId: string; range: string };
-        return await readValues(userId, spreadsheetId, range);
-      
-      case 'updateSheet':
-        const { spreadsheetId: updateId, range: updateRange, values } = 
-          func.arguments as { spreadsheetId: string; range: string; values: string[][] };
-        return await updateValues(userId, updateId, updateRange, values);
-      
-      default:
-        throw new Error(`Unknown function: ${func.function} for connector: google-sheets`);
     }
   }
 }

@@ -8,7 +8,6 @@ import {
   CardTitle,
   // CardDescription,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -37,6 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
+import ReactMarkdown from 'react-markdown';
 
 export default function PlaygroundPage() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>(
@@ -101,7 +101,7 @@ export default function PlaygroundPage() {
       "New Agent Description",
       selectedModel,
       "Default system prompt",
-      new Set()
+      new Set<string>()
     );
     await agentManager.createAgent(newAgent);
     saveAgent(newAgent);
@@ -140,13 +140,13 @@ export default function PlaygroundPage() {
     });
   };
 
-  const handleToggleConnector = (connectorId: string) => {
+  const handleToggleConnector = (connector: UserMappedConnector) => {
     setSelectedConnectors((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(connectorId)) {
-        newSet.delete(connectorId);
+      if (newSet.has(connector.connectorName)) {
+        newSet.delete(connector.connectorName);
       } else {
-        newSet.add(connectorId);
+        newSet.add(connector.connectorName);
       }
       return newSet;
     });
@@ -331,11 +331,11 @@ export default function PlaygroundPage() {
                     <div className="space-y-2">
                       {activatedConnectors.map((connector) => (
                         <button
-                          key={connector.id}
-                          onClick={() => handleToggleConnector(connector.id)}
+                          key={connector.connectorName}
+                          onClick={() => handleToggleConnector(connector)}
                           className={`w-full flex items-center p-2 rounded-lg transition-colors
                             ${
-                              selectedConnectors.has(connector.id)
+                              selectedConnectors.has(connector.connectorName)
                                 ? "bg-primary/10 text-primary"
                                 : "hover:bg-muted"
                             }`}
@@ -416,7 +416,9 @@ export default function PlaygroundPage() {
                               : "bg-muted"
                           }`}
                         >
-                          <p className="text-sm">{message.content}</p>
+                          <div className="text-sm prose dark:prose-invert max-w-none">
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -439,11 +441,21 @@ export default function PlaygroundPage() {
                 </div>
               </ScrollArea>
               <div className="flex items-center space-x-2 mt-4">
-                <Input
+                <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Type your message here..."
-                  onKeyUp={(e) => e.key === "Enter" && handleSend()}
+                  placeholder="Type your message here... (Press Ctrl+Enter to send)"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleSend();
+                    } else if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      setInput(prev => prev + "\n");
+                    }
+                  }}
+                  className="min-h-[60px] max-h-[200px]"
+                  rows={3}
                 />
                 <Button onClick={handleSend}>Send</Button>
               </div>
