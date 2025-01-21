@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { UserMappedConnector } from '@/lib/types';
+import { getKey } from '../supabase/server';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -17,8 +18,9 @@ interface ToolDefinition {
 }
 
 export async function handleChatCompletion(
-  messages: ChatCompletionMessageParam[],
   model: string,
+  messages: Array<{role: string, content: string}>,
+  systemPrompt?: string,
   selectedTools?: string[],
   userId?: string
 ) {
@@ -48,8 +50,12 @@ export async function handleChatCompletion(
       ]
     }), { aiTools: [], responseFormat: [] }) ?? { aiTools: [], responseFormat: [] };
 
+    const fullMessages = [
+      { role: "system", content: systemPrompt || "" },
+      ...messages
+    ];
     const completion = await openai.chat.completions.create({
-      messages,
+      messages: fullMessages as ChatCompletionMessageParam[],
       model: model || "gpt-4o-mini",
       tools: aiTools,
       tool_choice: "auto",
@@ -89,7 +95,7 @@ export async function handleChatCompletion(
 
       // Get a new completion with the function results
       const newCompletion = await openai.chat.completions.create({
-        messages: [...messages, message, ...results],
+        messages: [...messages, message, ...results] as ChatCompletionMessageParam[],
         model: model || "gpt-4o-mini",
         response_format: responseFormat.find(rf => rf.function_name === message.tool_calls?.[0].function.name)?.json_schema as OpenAI.ResponseFormatJSONSchema
       });
@@ -236,9 +242,15 @@ async function executeFunctionCall(
 ) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+    const {data, error} = await getKey(userId!);
+    if (!data || !data.api_key) {
+      throw new Error(error?.message || "No valid credentials. User must authorize first.");
+    }
+
     const headers = {
       'Content-Type': 'application/json',
-      'x-api-key': process.env.GODILOCKS_API_KEY!
+      'x-api-key': data.api_key
     };
     
     if (functionName === 'google-sheets_read_sheet') {

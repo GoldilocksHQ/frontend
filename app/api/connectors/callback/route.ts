@@ -1,5 +1,6 @@
 import { withApiAuth } from '@/app/api/middleware';
 import { exchangeCodeForTokens, storeGoogleTokens } from '@/connectors/google-sheets/connector';
+import { UUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const GET = withApiAuth(async (req: NextRequest) => {
@@ -23,7 +24,10 @@ export const GET = withApiAuth(async (req: NextRequest) => {
     }
 
     const tokens = await exchangeCodeForTokens(code);
-    const {success: storeSuccess, error: storeError} = await storeGoogleTokens(tokens, state);
+
+    const decodedState = decodeURIComponent(state || "");
+    const {userId} = JSON.parse(decodedState) as { userId: UUID };
+    const {success: storeSuccess, error: storeError} = await storeGoogleTokens(tokens, userId);
     if (!storeSuccess) {
       console.error('Error storing tokens:', storeError);
       return NextResponse.redirect(

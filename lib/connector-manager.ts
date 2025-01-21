@@ -32,7 +32,7 @@ export class ConnectorManager {
   async loadMappedConnectorsList() {
     const all_connectors = await this.loadAllConnectors();
     const activated_connectors = await this.loadActivatedConnectors();
-    this.connectors = this.mapUserActivatedConnectors(all_connectors, activated_connectors);
+    this.connectors = await this.mapUserActivatedConnectors(all_connectors, activated_connectors);
   }
 
   async loadAllConnectors() {

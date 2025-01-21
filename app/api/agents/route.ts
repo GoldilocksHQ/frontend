@@ -9,9 +9,9 @@ export const POST = withApiAuth(async (req: NextRequest) => {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const { messages, model, selectedTools } = await req.json();
+    const { model, messages, systemPrompt, selectedTools } = await req.json();
     
-    const response = await handleChatCompletion(messages, model, selectedTools, user.id);
+    const response = await handleChatCompletion(model, messages, systemPrompt, selectedTools , user.id);
     return NextResponse.json(response);
 
   } catch (error) {
