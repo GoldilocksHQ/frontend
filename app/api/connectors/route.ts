@@ -1,103 +1,45 @@
 import { withApiAuth } from '@/app/api/middleware';
-import { readValues, updateValues } from '@/connectors/google-sheets/connector';
-import { getUser } from '@/services/supabase/client';
 import { NextRequest, NextResponse } from 'next/server';
+import { ConnectorService } from '@/services/api/connector-service';
 import { UUID } from 'crypto';
 
-export const GET = withApiAuth(async (req: NextRequest) => {
-  try {
-    const searchParams = req.nextUrl.searchParams;
-    let userId = searchParams.get('userId');
-
-    if (!userId) {
-      const user = await getUser();
-      if (!user) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401 }
-        );
-      } else {
-        userId = user.id;
-      }
-    }
-
-    const spreadsheetId = searchParams.get('spreadsheetId');
-    const range = searchParams.get('range');
-
-    if (!spreadsheetId || !range) {
-      return NextResponse.json(
-        { error: 'Missing required parameters' },
-        { status: 400 }
-      );
-    }
-
-    const { success, result, error } = await readValues(
-      userId as UUID,
-      spreadsheetId,
-      range
-    );
-
-    if (!success) {
-      return NextResponse.json(
-        { error: error || 'Failed to read values' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ values: result });
-  } catch (error) {
-    console.error('Sheet read error:', error);
-    return NextResponse.json(
-      { error: 'Failed to read sheet values' },
-      { status: 500 }
-    );
-  }
-});
+const connectorService = new ConnectorService();
 
 export const POST = withApiAuth(async (req: NextRequest) => {
   try {
-    // Get the body of the request
-    const { spreadsheetId, range, values, userId: passedUserId} = await req.json();
-    let userId = passedUserId;
+    const { connector, function: funcName, arguments: args, userId } = await req.json();
 
     if (!userId) {
-      const user = await getUser();
-      if (!user) {
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401 }
-        );
-      } else {
-        userId = user.id;
-      }
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
-    if (!spreadsheetId || !range || !values) {
+    if (!connector || !funcName || !args) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
       );
     }
 
-    const { success, result, error } = await updateValues(
+    const { success, result, error } = await connectorService.executeFunction(
       userId as UUID,
-      spreadsheetId,
-      range,
-      values
+      { connector, function: funcName, arguments: args }
     );
 
     if (!success) {
       return NextResponse.json(
-        { error: error || 'Failed to update values' },
+        { error: error || 'Function execution failed' },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ result });
   } catch (error) {
-    console.error('Sheet update error:', error);
+    console.error('Connector execution error:', error);
     return NextResponse.json(
-      { error: 'Failed to update sheet values' },
+      { error: 'Failed to execute connector function' },
       { status: 500 }
     );
   }

@@ -1,5 +1,4 @@
 import { withApiAuth } from '@/app/api/middleware';
-import { getUser } from '@/services/supabase/client';
 import { NextRequest, NextResponse } from "next/server";
 import { ConnectorService } from "@/services/api/connector-service";
 import { ErrorResponse } from "@/lib/types";
@@ -10,24 +9,15 @@ export const GET = withApiAuth(async (req: NextRequest) => {
     const userId = searchParams.get('user_id');
     const connectorService = new ConnectorService();
 
-    // Authenticate user if userId is provided
+    // If userId is provided, return the user's connectors
     if (userId) {
-      const user = await getUser();
-      if (!user || user.id !== userId) {
-        return NextResponse.json<ErrorResponse>(
-          { error: "Unauthorized" },
-          { status: 401 }
-        );
-      }
-    }
-
-  
-    if (userId) {
+      // Get the user's connectors.
       const userConnectors = await connectorService.getUserConnectors(userId);
       return NextResponse.json({
         activatedConnectors: userConnectors
       });
     } else {
+      // If userId is not provided, return all connectors
       const connectors = await connectorService.getAllConnectors();
       return NextResponse.json({
         connectors: connectors

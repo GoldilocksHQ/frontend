@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { UserMappedConnector } from '@/lib/types';
-import { getKey } from '../supabase/client';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -107,7 +106,7 @@ async function getToolDefinitions(connectorIds: string[]): Promise<ToolDefinitio
       },
       functions: [
         {
-          name: "read_sheet",
+          name: "readSheet",
           description: "Read values from a Google Sheet",
           parameters: {
             type: "object",
@@ -159,7 +158,7 @@ async function getToolDefinitions(connectorIds: string[]): Promise<ToolDefinitio
           }
         },
         {
-          name: "update_sheet",
+          name: "updateSheet",
           description: "Update values in a Google Sheet",
           parameters: {
             type: "object",
@@ -248,62 +247,102 @@ async function executeFunctionCall(
 ) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
-    const {data, error} = await getKey(userId!);
-    if (!data || !data.api_key) {
-      throw new Error(error?.message || "No valid credentials. User must authorize first.");
-    }
-
     const headers = {
       'Content-Type': 'application/json',
-      'x-api-key': data.api_key
+      'x-api-key': process.env.GODILOCKS_API_KEY!
     };
     
-    if (functionName === 'google-sheets_read_sheet') {
-      const url = new URL(`${baseUrl}/api/connectors`);
-      url.searchParams.set('spreadsheetId', args.spreadsheetId as string);
-      url.searchParams.set('range', args.range as string);
-      if (userId) {
-        url.searchParams.set('userId', userId);
-      }
-      const response = await fetch(url, { headers });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to read sheet: ${errorText}`);
-      }
-      
-      const data = await response.json();
-      if (data.error) throw new Error(data.error);
-      return data.values;
-    }
+    // Extract connector and function names
+    const [connector, func] = functionName.split('_');
     
-    if (functionName === 'google-sheets_update_sheet') {
-      const response = await fetch(`${baseUrl}/api/connectors`, {
-        method: 'POST',
-        headers,
-        cache: 'no-store',
-        body: JSON.stringify({
-          spreadsheetId: args.spreadsheetId,
-          range: args.range,
-          values: args.values,
-          userId: userId
-        })
-      });
+    const response = await fetch(`${baseUrl}/api/connectors`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        connector,
+        function: func,
+        arguments: args,
+        userId
+      })
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to update sheet: ${errorText}`);
-      }
-
-      const updateData = await response.json();
-      if (updateData.error) throw new Error(updateData.error);
-      return updateData.result;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Function execution failed: ${errorText}`);
     }
 
-    throw new Error(`Unknown function: ${functionName}`);
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    return data.result;
   } catch (error) {
     console.error(`Error executing ${functionName}:`, error);
     throw error;
   }
 } 
+
+// async function executeFunctionCall(
+//   functionName: string,
+//   args: Record<string, unknown>,
+//   userId?: string
+// ) {
+//   try {
+//     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+//     const {data, error} = await getKey(userId!);
+//     if (!data || !data.api_key) {
+//       throw new Error(error?.message || "No valid credentials. User must authorize first.");
+//     }
+
+//     const headers = {
+//       'Content-Type': 'application/json',
+//       'x-api-key': data.api_key
+//     };
+    
+//     if (functionName === 'google-sheets_read_sheet') {
+//       const url = new URL(`${baseUrl}/api/connectors`);
+//       url.searchParams.set('spreadsheetId', args.spreadsheetId as string);
+//       url.searchParams.set('range', args.range as string);
+//       if (userId) {
+//         url.searchParams.set('userId', userId);
+//       }
+//       const response = await fetch(url, { headers });
+      
+//       if (!response.ok) {
+//         const errorText = await response.text();
+//         throw new Error(`Failed to read sheet: ${errorText}`);
+//       }
+      
+//       const data = await response.json();
+//       if (data.error) throw new Error(data.error);
+//       return data.values;
+//     }
+    
+//     if (functionName === 'google-sheets_update_sheet') {
+//       const response = await fetch(`${baseUrl}/api/connectors`, {
+//         method: 'POST',
+//         headers,
+//         cache: 'no-store',
+//         body: JSON.stringify({
+//           spreadsheetId: args.spreadsheetId,
+//           range: args.range,
+//           values: args.values,
+//           userId: userId
+//         })
+//       });
+
+//       if (!response.ok) {
+//         const errorText = await response.text();
+//         throw new Error(`Failed to update sheet: ${errorText}`);
+//       }
+
+//       const updateData = await response.json();
+//       if (updateData.error) throw new Error(updateData.error);
+//       return updateData.result;
+//     }
+
+//     throw new Error(`Unknown function: ${functionName}`);
+//   } catch (error) {
+//     console.error(`Error executing ${functionName}:`, error);
+//     throw error;
+//   }
+// } 

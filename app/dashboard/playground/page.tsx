@@ -55,24 +55,23 @@ export default function PlaygroundPage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [, setError] = useState<string | null>(null);
-  const [connectorManager, setConnectorManager] = useState<ConnectorManager | null>(null);
+  const [, setConnectorManager] = useState<ConnectorManager | null>(null);
   const [agentManager, setAgentManager] = useState<AgentManager | null>(null);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
 
-  
 
   useEffect(() => {
     initializeConnectorsAndAgents();
   }, []);
   
-    useEffect(() => {
-      if (scrollAreaRef.current) {
-        scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-      }
-    }, [messages]);  
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
+  }, [messages]);  
   
   const initializeConnectorsAndAgents = async () => {
     try {
@@ -151,9 +150,9 @@ export default function PlaygroundPage() {
 
     const userMessage = { role: "user", content: input };
     selectedAgent.addMessage(userMessage);
-
-    setMessages(selectedAgent.messages);
+    setMessages([...selectedAgent.messages]); // Create a new array to trigger re-render
     setInput("");
+
     try {
       const response = await agentManager?.chat(selectedAgent!);
       if (response) {
@@ -161,7 +160,7 @@ export default function PlaygroundPage() {
           role: response.role,
           content: response.content,
         });
-        setMessages(selectedAgent.messages);
+        setMessages([...selectedAgent.messages]); // Create a new array to trigger re-render
       }
     } catch (error) {
       setError(

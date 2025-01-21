@@ -1,4 +1,4 @@
-"user server"
+"use server"
 
 import { type Credentials as GoogleCredentials, OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
@@ -7,7 +7,7 @@ import { storeCredentials, getCredentials, type Credentials as SupabaseCredentia
 import { UUID } from 'crypto';
 import { isTokenExpired } from '@/lib/utils';
 
-export function constructCredentials(userId: UUID, tokenType: string, token?: string, createdAt?: string, expiresAt?: string): SupabaseCredentials {
+export async function constructCredentials(userId: UUID, tokenType: string, token?: string, createdAt?: string, expiresAt?: string): Promise<SupabaseCredentials> {
   return {
     userId: userId,
     tokenName: 'google-sheets',
@@ -27,7 +27,7 @@ const GOOGLE_CONFIG = {
   ]
 };
 
-export function createOAuth2Client(): OAuth2Client {
+export async function createOAuth2Client(): Promise<OAuth2Client> {
   return new OAuth2Client(
     GOOGLE_CONFIG.clientId,
     GOOGLE_CONFIG.clientSecret,
@@ -36,14 +36,14 @@ export function createOAuth2Client(): OAuth2Client {
 }
 
 export async function exchangeCodeForTokens(code: string): Promise<GoogleCredentials> {
-  const oauth2Client = createOAuth2Client();
+  const oauth2Client = await createOAuth2Client();
   const { tokens: googleTokens } = await oauth2Client.getToken(code);
   return googleTokens;
 }
 
 // Implement a function to refresh the tokens
 export async function refreshTokens(refreshToken: string): Promise<{success: boolean, credentials: GoogleCredentials | null, error: string}> {
-  const oauth2Client = createOAuth2Client();
+  const oauth2Client = await createOAuth2Client();
   oauth2Client.setCredentials({
     refresh_token: refreshToken
   });
@@ -58,11 +58,10 @@ export async function storeGoogleTokens(tokens: GoogleCredentials, userId: UUID)
     const refreshToken = tokens.refresh_token!;
     const expiryDate = new Date(tokens.expiry_date!).toISOString();    
 
-    const accessCredentials = constructCredentials(
+    const accessCredentials = await constructCredentials(
       userId, 'access', accessToken, new Date().toISOString(), expiryDate);
-    const refreshCredentials = constructCredentials(
+    const refreshCredentials = await constructCredentials(
       userId, 'refresh', refreshToken, new Date().toISOString());
-
 
     const {success: accessSuccess, error: accessError} = 
       await tokenExists(accessCredentials) ? 
@@ -87,8 +86,8 @@ export async function storeGoogleTokens(tokens: GoogleCredentials, userId: UUID)
 }
 
 
-export function getAuthUrl(userId: UUID): string {
-  const oauth2Client = createOAuth2Client();
+export async function getAuthUrl(userId: UUID): Promise<string> {
+  const oauth2Client = await createOAuth2Client();
   const state = encodeURIComponent(JSON.stringify({ userId }));
   
   return oauth2Client.generateAuthUrl({
@@ -102,14 +101,14 @@ export function getAuthUrl(userId: UUID): string {
 
 export async function retrieveCredentials(userId: UUID): Promise<{success: boolean, credentials: GoogleCredentials | null, error?: string}> {
   const accessCredentials = constructCredentials(userId, 'access');
-  const { success: accessSuccess, credentials: updatedAccessCredentials, error: accessError } = await getCredentials(accessCredentials);
+  const { success: accessSuccess, credentials: updatedAccessCredentials, error: accessError } = await getCredentials(await accessCredentials);
   if (!accessSuccess || !updatedAccessCredentials) {
     return {success: false, credentials: null, error: accessError || "No valid credentials. User must authorize first."};
   }
   // return {success: true, credentials: updatedAccessCredentials, error: ""};
 
   const refreshCredentials = constructCredentials(userId, 'refresh');
-  const { success: refreshSuccess, credentials: updatedRefreshCredentials, error: refreshError } = await getCredentials(refreshCredentials);
+  const { success: refreshSuccess, credentials: updatedRefreshCredentials, error: refreshError } = await getCredentials(await refreshCredentials);
 
   if (!refreshSuccess || !updatedRefreshCredentials) {
     throw new Error(refreshError || "No valid credentials. User must authorize first.");
@@ -136,7 +135,7 @@ export async function readValues(
       throw new Error(error || "No valid credentials. User must authorize first.");
     }
 
-    const oauth2Client = createOAuth2Client();
+    const oauth2Client = await createOAuth2Client();
     oauth2Client.setCredentials({
       access_token: credentials.access_token,
       refresh_token: credentials.refresh_token
@@ -163,20 +162,20 @@ export async function updateValues(
 ): Promise<{success: boolean, result: sheets_v4.Schema$UpdateValuesResponse | null, error?: string}> {
   try {
     const accessCredentials = constructCredentials(userId, 'access');
-    const { success, credentials: updatedAccessCredentials, error: accessError } = await getCredentials(accessCredentials);
+    const { success, credentials: updatedAccessCredentials, error: accessError } = await getCredentials(await accessCredentials);
 
     if (!success || !updatedAccessCredentials) {
       throw new Error(accessError || "No valid credentials. User must authorize first.");
     }
 
     const refreshCredentials = constructCredentials(userId, 'refresh');
-    const { success: refreshSuccess, credentials: updatedRefreshCredentials, error: refreshError } = await getCredentials(refreshCredentials);
+    const { success: refreshSuccess, credentials: updatedRefreshCredentials, error: refreshError } = await getCredentials(await refreshCredentials);
 
     if (!refreshSuccess || !updatedRefreshCredentials) {
       throw new Error(refreshError || "No valid credentials. User must authorize first.");
     }
 
-    const oauth2Client = createOAuth2Client();
+    const oauth2Client = await createOAuth2Client();
     oauth2Client.setCredentials({
       access_token: updatedAccessCredentials.token,
       refresh_token: updatedRefreshCredentials.token

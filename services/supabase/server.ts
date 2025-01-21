@@ -30,6 +30,16 @@ export async function createClient() {
   )
 }
 
+export async function confirmKey(key: string) {
+  const supabase = await createClient();
+  return await supabase
+    .schema('goldilocks')
+    .from('api_keys')
+    .select('api_key')
+    .eq('api_key', key)
+    .single();
+}
+
 export interface Credentials {
   userId: UUID;
   tokenName: string;
