@@ -40,7 +40,7 @@ export async function handleFunction(
 
     switch (functionName) {
       case 'listFiles': {
-        if (!args.query) {
+        if (!args.query && args.query !== '') {
           return {success: false, result: null, error: 'Query parameter is required'};
         }
         return await listFiles(userId, args.query, args.pageSize, args.pageToken);
@@ -55,7 +55,7 @@ export async function handleFunction(
         if (!args.fileName || !args.content || !args.mimeType) {
           return {success: false, result: null, error: 'File name, content and mime type are required'};
         }
-        return await uploadFile(userId, args.fileName, args.content, args.mimeType, args.parentFolderId);
+        return await uploadFile(userId, args.fileName, args.content, args.mimeType);
       }
       case 'readFile': {
         if (!args.fileId) {
@@ -64,10 +64,10 @@ export async function handleFunction(
         return await readFile(userId, args.fileId);
       }
       case 'updateFile': {
-        if (!args.fileId || !args.content || !args.mimeType) {
-          return {success: false, result: null, error: 'File ID, content and mime type are required'};
+        if (!args.fileId || !args.fileName || !args.mimeType) {
+          return {success: false, result: null, error: 'File ID, file name and mime type are required'};
         }
-        return await updateFile(userId, args.fileId, args.content, args.mimeType);
+        return await updateFile(userId, args.fileId, args.fileName, args.mimeType, args.content, args.parentFolderId);
       }
       case 'deleteFile': {
         if (!args.fileId) {
@@ -109,7 +109,7 @@ async function listFiles(
       q: query,
       pageSize: pageSize || 10,
       pageToken: pageToken || undefined,
-      fields: 'nextPageToken, files(id, name, mimeType, createdTime, modifiedTime)',
+      fields: 'nextPageToken, files(id, name, mimeType, parents, owners, createdTime, modifiedTime, size, fullFileExtension)',
     });
 
     return { success: true, result: response.data };
@@ -139,14 +139,14 @@ async function createFolder(
 
     const drive = google.drive({ version: 'v3', auth });
 
-    const fileMetadata = {
+    const media = {
       name: folderName,
       mimeType: 'application/vnd.google-apps.folder',
-      parents: parentFolderId ? [parentFolderId] : undefined,
+      ...(parentFolderId ? { parents: [parentFolderId] } : {}),
     };
 
     const response = await drive.files.create({
-      requestBody: fileMetadata,
+      requestBody: media,
       fields: 'id, name, mimeType',
     });
 
@@ -163,7 +163,6 @@ async function uploadFile(
   fileName: string,
   content: string,
   mimeType: string,
-  parentFolderId?: string
 ): Promise<FunctionResult<drive_v3.Schema$File>> {
   try {
     const credentials = await retrieveCredentials(userId, CONNECTOR_NAME);
@@ -181,7 +180,6 @@ async function uploadFile(
 
     const fileMetadata = {
       name: fileName,
-      parents: parentFolderId ? [parentFolderId] : undefined,
     };
 
     const media = {
@@ -237,8 +235,10 @@ async function readFile(
 async function updateFile(
   userId: UUID,
   fileId: string,
-  content: string,
-  mimeType: string
+  fileName: string,
+  mimeType: string,
+  content?: string,
+  parentFolderId?: string
 ): Promise<FunctionResult<drive_v3.Schema$File>> {
   try {
     const credentials = await retrieveCredentials(userId, CONNECTOR_NAME);
@@ -254,15 +254,27 @@ async function updateFile(
 
     const drive = google.drive({ version: 'v3', auth });
 
-    const media = {
+    // First get the current file to check its parents
+    let currentFile;
+    if (parentFolderId) {
+      currentFile = await drive.files.get({
+        fileId: fileId,
+        fields: 'parents'
+      });
+    }
+
+    const requestBody = {
+      name: fileName,
       mimeType: mimeType,
-      body: content,
+      ...(content ? { body: content } : {})
     };
 
     const response = await drive.files.update({
       fileId: fileId,
-      media: media,
-      fields: 'id, name, mimeType',
+      requestBody: requestBody,
+      fields: 'id, name, mimeType, modifiedTime, size, parents',
+      ...(currentFile ? { addParents: parentFolderId } : {}),
+      ...(currentFile ? { removeParents: currentFile.data.parents?.join(',') } : {}),
     });
 
     return { success: true, result: response.data };

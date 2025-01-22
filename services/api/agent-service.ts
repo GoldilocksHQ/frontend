@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
-import { googleSheetsToolDefinition, googleDriveToolDefinition } from '@/connectors/function-schema';
+import { googleSheetsToolDefinition, googleDriveToolDefinition, googleDocsToolDefinition } from '@/connectors/function-schema';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -111,6 +111,8 @@ async function getToolDefinitions(connectorNames: string[]): Promise<ToolDefinit
         return googleSheetsToolDefinition;
       case 'google-drive':
         return googleDriveToolDefinition;
+      case 'google-docs':
+        return googleDocsToolDefinition;
       default:
         throw new Error(`Unknown connector: ${connectorName}`);
     }

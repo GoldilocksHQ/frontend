@@ -2,6 +2,7 @@ import { queryDatabase } from "../supabase/server";
 import { Connector, ActivatedConnector } from "../../lib/types";
 import { handleFunction as handleGoogleSheetsFunction } from "@/connectors/google-sheets/connector";
 import { handleFunction as handleGoogleDriveFunction } from "@/connectors/google-drive/connector";
+import { handleFunction as handleGoogleDocsFunction } from "@/connectors/google-docs/connector";
 import { UUID } from "crypto";
 
 export interface ConnectorFunction {
@@ -56,6 +57,8 @@ export class ConnectorService {
         return handleGoogleSheetsFunction(userId, func.function, func.arguments);
       case 'google-drive':
         return handleGoogleDriveFunction(userId, func.function, func.arguments);
+      case 'google-docs':
+        return handleGoogleDocsFunction(userId, func.function, func.arguments);
       default:
         throw new Error(`Unknown connector: ${func.connector}`);
     }

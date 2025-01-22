@@ -12,8 +12,9 @@ const GOOGLE_CONFIG = {
 };
 
 const SCOPES = {
-  'google-sheets': ['https://www.googleapis.com/auth/spreadsheets'],
   "google-drive": ['https://www.googleapis.com/auth/drive'],
+  "google-sheets": ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
+  "google-docs": ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive'],
 }
 
 export async function constructCredentials(userId: UUID, tokenName: string, tokenType: string, token?: string, createdAt?: string, expiresAt?: string): Promise<SupabaseCredentials> {
