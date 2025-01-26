@@ -4,15 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { UserMappedConnector } from "@/lib/types";
+import { UserActivationMappedConnector } from "@/lib/types";
 import { ConnectorManager } from "@/lib/connector-manager";
 import path from "path";
 import { Loader2 } from "lucide-react";
 
 
 export default function ConnectorsPage() {
-  const [connectors, setConnectors] = useState<UserMappedConnector[]>([]);
-  const [selectedConnector, setSelectedConnector] = useState<UserMappedConnector | null>(null);
+  const [connectors, setConnectors] = useState<UserActivationMappedConnector[]>([]);
+  const [selectedConnector, setSelectedConnector] = useState<UserActivationMappedConnector | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const logoPath = path.join("../../", "logos");
@@ -36,7 +36,7 @@ export default function ConnectorsPage() {
     }
   };
 
-  const handleConnect = async (connector: UserMappedConnector) => {
+  const handleConnect = async (connector: UserActivationMappedConnector) => {
     setError(null);
     setSelectedConnector(connector);
     try {
@@ -76,14 +76,14 @@ export default function ConnectorsPage() {
             <div className="flex flex-col h-full items-center">
 
               <Image 
-                src={`${logoPath}/${connector.connectorName}.svg`}
-                alt={`${connector.connectorDisplayName} thumbnail`}
+                src={`${logoPath}/${connector.name}.svg`}
+                alt={`${connector.displayName} thumbnail`}
                 className="mb-4 w-16 h-16"
                 width={16}
                 height={16}
               />
               <h2 className="text-lg font-semibold mb-4">
-                {connector.connectorDisplayName}
+                {connector.displayName}
               </h2>
               
               <div className="mt-auto">

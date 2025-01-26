@@ -1,7 +1,6 @@
 import { withApiAuth } from '@/app/api/middleware';
 import { NextRequest, NextResponse } from "next/server";
 import { ConnectorService } from "@/services/api/connector-service";
-import { ErrorResponse } from "@/lib/types";
 
 export const GET = withApiAuth(async (req: NextRequest) => {
   try {
@@ -14,7 +13,7 @@ export const GET = withApiAuth(async (req: NextRequest) => {
       // Get the user's connectors.
       const userConnectors = await connectorService.getUserConnectors(userId);
       return NextResponse.json({
-        activatedConnectors: userConnectors
+        connectors: userConnectors
       });
     } else {
       // If userId is not provided, return all connectors
@@ -26,7 +25,7 @@ export const GET = withApiAuth(async (req: NextRequest) => {
 
   } catch (error) {
     console.error('Error fetching connectors:', error);
-    return NextResponse.json<ErrorResponse>(
+    return NextResponse.json<{ error: string }>(
       { error: error instanceof Error ? error.message : 'Failed to fetch connectors' },
       { status: 500 }
     );

@@ -1,5 +1,5 @@
 import { queryDatabase } from "../supabase/server";
-import { Connector, ActivatedConnector } from "../../lib/types";
+import { Connector} from "../../lib/types";
 import { handleFunction as handleGoogleSheetsFunction } from "@/connectors/google-sheets/connector";
 import { handleFunction as handleGoogleDriveFunction } from "@/connectors/google-drive/connector";
 import { handleFunction as handleGoogleDocsFunction } from "@/connectors/google-docs/connector";
@@ -25,18 +25,19 @@ export class ConnectorService {
 
     const connectors = Array.isArray(data) ? data.map((connector: Record<string, string>) => ({
       id: connector.id,
-      connectorName: connector.connector_name,
-      connectorDisplayName: connector.connector_display_name
+      name: connector.connector_name,
+      displayName: connector.connector_display_name,
+      description: connector.connector_description
     })) : [];
     
     return connectors;
   }
 
-  async getUserConnectors(userId: string): Promise<ActivatedConnector[]> {
+  async getUserConnectors(userId: string): Promise<Connector[]> {
     const { success, data, error } = await queryDatabase(
       "api",
       "activated_connectors",
-      "connector_id",
+      "connectors ( id, connector_name, connector_display_name)",
       { user_id: userId }
     );
 
@@ -44,8 +45,11 @@ export class ConnectorService {
       throw new Error(error || "Failed to fetch user connectors");
     }
 
-    const connectors = Array.isArray(data) ? data.map((connector: Record<string, string>) => ({
-      connectorId: connector.connector_id
+    const connectors = Array.isArray(data) ? data.map((connectors: Record<string, string>) => ({
+      id: connectors.id,
+      name: connectors.connector_name,
+      displayName: connectors.connector_display_name,
+      description: connectors.connector_description
     })) : [];
     
     return connectors;

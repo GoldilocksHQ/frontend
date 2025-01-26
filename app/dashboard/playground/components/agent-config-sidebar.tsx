@@ -1,253 +1,235 @@
 import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Info } from "lucide-react";
 import { Agent } from "@/lib/agent-manager";
-import { UserMappedConnector, ModelOption } from "@/lib/types";
-import Image from "next/image";
+import { UserActivationMappedConnector, ModelOption, ChainType } from "@/lib/types";
 import { UUID } from "crypto";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import Image from "next/image";
 
 interface AgentConfigSidebarProps {
-  selectedAgent: Agent;
   agents: Agent[];
+  selectedAgent: Agent;
   selectedModel: ModelOption;
-  setSelectedModel: (model: ModelOption) => void;
-  modelOptions: ModelOption[];
+  handleModelChange: (value: string) => void;
   systemPrompt: string;
   setSystemPrompt: (prompt: string) => void;
-  activatedConnectors: UserMappedConnector[];
+  modelOptions: ModelOption[];
+  handleUpdateAgent: () => void;
+  isUpdating: boolean;
+  connectors: UserActivationMappedConnector[];
   selectedConnectors: Set<string>;
-  handleToggleConnector: (connector: UserMappedConnector) => void;
+  handleToggleConnector: (connector: UserActivationMappedConnector) => void;
   linkedAgentIds: Set<UUID>;
   handleToggleLinkedAgent: (agentId: UUID) => void;
-  onUpdateAgent: () => void;
-  onAgentNameChange: (name: string) => void;
-  onAgentDescriptionChange: (description: string) => void;
+  selectedChainType: ChainType;
+  setSelectedChainType: (chainType: ChainType) => void;
 }
 
 export function AgentConfigSidebar({
-  selectedAgent,
   agents,
+  selectedAgent,
   selectedModel,
-  setSelectedModel,
-  modelOptions,
+  handleModelChange,
   systemPrompt,
   setSystemPrompt,
-  activatedConnectors,
+  modelOptions,
+  handleUpdateAgent,
+  isUpdating,
+  connectors,
   selectedConnectors,
   handleToggleConnector,
   linkedAgentIds,
   handleToggleLinkedAgent,
-  onUpdateAgent,
-  onAgentNameChange,
-  onAgentDescriptionChange,
+  selectedChainType,
+  setSelectedChainType,
 }: AgentConfigSidebarProps) {
-  const [descriptionDialogOpen, setDescriptionDialogOpen] = useState(false);
-  const [customToolDialogOpen, setCustomToolDialogOpen] = useState(false);
-  const [customToolSchema, setCustomToolSchema] = useState("");
+  const [isDescriptionDialogOpen, setIsDescriptionDialogOpen] = useState(false);
+  const [tempDescription, setTempDescription] = useState(selectedAgent.agentDescription);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  const handleCustomToolSubmit = () => {
-    try {
-      if (!customToolSchema.trim()) {
-        // TODO: Add toast notification
-        return;
-      }
-      const schema = JSON.parse(customToolSchema);
-      console.log('Custom tool schema:', schema);
-      setCustomToolDialogOpen(false);
-      setCustomToolSchema("");
-    } catch (error) {
-      console.error('Error adding custom tool:', error);
-    }
+  const handleDescriptionUpdate = () => {
+    selectedAgent.agentDescription = tempDescription;
+    setHasUnsavedChanges(true);
+    setIsDescriptionDialogOpen(false);
+  };
+
+  const handleSaveChanges = () => {
+    handleUpdateAgent();
+    setHasUnsavedChanges(false);
   };
 
   return (
-    <Card className="w-80 flex-none flex flex-col">
-      <CardHeader className="py-4">
-        <CardTitle className="text-lg">Agent Configuration</CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col min-h-0">
-        <div className="flex-1 overflow-y-auto space-y-4 px-4 -mx-4">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-sm font-medium">Agent Name</label>
-              <Dialog open={descriptionDialogOpen} onOpenChange={setDescriptionDialogOpen}>
+    <Card className="w-80 flex flex-col h-full">
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-6">
+          {/* Agent Name and Description Section */}
+          <div className="space-y-2">
+            <Label>Agent Name</Label>
+            <div className="flex items-center gap-2">
+              <Input 
+                value={selectedAgent.agentName}
+                onChange={(e) => {
+                  selectedAgent.agentName = e.target.value;
+                  setHasUnsavedChanges(true);
+                }}
+                className="flex-1"
+              />
+              <Dialog open={isDescriptionDialogOpen} onOpenChange={setIsDescriptionDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-6 px-2">
-                    Add Description
+                  <Button variant="ghost" size="icon">
+                    <Info className="h-4 w-4" />
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Agent Description</DialogTitle>
-                    <DialogDescription>Add a description for your agent.</DialogDescription>
+                    <DialogDescription>Update the description for {selectedAgent.agentName}</DialogDescription>
                   </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <Textarea
-                      value={selectedAgent?.agentDescription || ""}
-                      onChange={(e) => onAgentDescriptionChange(e.target.value)}
-                      placeholder="Enter a description for your agent..."
-                      className="h-[150px]"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-3">
-                    <Button variant="outline" onClick={() => setDescriptionDialogOpen(false)}>
-                      Close
-                    </Button>
+                  <Textarea
+                    value={tempDescription}
+                    onChange={(e) => setTempDescription(e.target.value)}
+                    className="min-h-[100px]"
+                  />
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Button variant="outline" onClick={() => setIsDescriptionDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={handleDescriptionUpdate}>Save</Button>
                   </div>
                 </DialogContent>
               </Dialog>
             </div>
-            <input
-              type="text"
-              value={selectedAgent?.agentName || ""}
-              onChange={(e) => onAgentNameChange(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-            />
           </div>
 
-          <div>
-            <label className="text-sm font-medium mb-2 block">Model</label>
-            <Select
-              value={selectedModel.value}
-              onValueChange={(value) =>
-                setSelectedModel(
-                  modelOptions.find((model) => model.value === value) ||
-                    modelOptions[0]
-                )
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a model" />
+          {/* Model Selection Section */}
+          <div className="space-y-2">
+            <Label>Model</Label>
+            <Select defaultValue="gpt-4o-mini" value={selectedModel.name} onValueChange={(value) => {
+              handleModelChange(value);
+              setHasUnsavedChanges(true);
+            }}>
+              <SelectTrigger>
+                <SelectValue>{selectedModel.name}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {modelOptions.map((model) => (
-                  <SelectItem key={model.value} value={model.value}>
-                    {model.label}
+                  <SelectItem key={model.name} value={model.name}>
+                    {model.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div>
-            <label className="text-sm font-medium mb-2 block">System Prompt</label>
+          {/* Chain Type Selection */}
+          <div className="space-y-2">
+            <Label>Chain Type</Label>
+            <Select 
+              value={selectedChainType} 
+              onValueChange={(value) => {
+                setSelectedChainType(value as ChainType);
+                setHasUnsavedChanges(true);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue>{selectedChainType}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {Object.values(ChainType).map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* System Prompt Section */}
+          <div className="space-y-2">
+            <Label>System Prompt</Label>
             <Textarea
               value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              className="h-32"
+              onChange={(e) => {
+                setSystemPrompt(e.target.value);
+                setHasUnsavedChanges(true);
+              }}
+              className="min-h-[100px] resize-none"
             />
           </div>
 
-          <div className="flex-1 min-h-0">
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-sm font-medium block">Active Connectors</label>
-              <Dialog open={customToolDialogOpen} onOpenChange={setCustomToolDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-6 px-2">
-                    Add Custom Tool
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add Custom Tool Function</DialogTitle>
-                    <DialogDescription>
-                      Enter the JSON schema for your custom tool function.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <Textarea
-                      value={customToolSchema}
-                      onChange={(e) => setCustomToolSchema(e.target.value)}
-                      placeholder='{
-  "name": "my_function",
-  "description": "Description of what the function does",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "param1": {
-        "type": "string",
-        "description": "Description of param1"
-      }
-    },
-    "required": ["param1"]
-  }
-}'
-                      className="h-[300px] font-mono"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-3">
-                    <Button variant="outline" onClick={() => setCustomToolDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleCustomToolSubmit}>Add Tool</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+          {/* Tools Section */}
+          <div className="space-y-2">
+            <Label>Tools</Label>
+            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+              {connectors.map((connector) => (
+                <div
+                  key={connector.name}
+                  className={`flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer transition-colors ${
+                    selectedConnectors.has(connector.name) ? "bg-accent" : ""
+                  }`}
+                  onClick={() => {
+                    handleToggleConnector(connector);
+                    setHasUnsavedChanges(true);
+                  }}
+                >
+                  <Image 
+                    src={`/logos/${connector.name}.svg`}
+                    alt={connector.displayName}
+                    width={16}
+                    height={16}
+                    className="flex-shrink-0"
+                  />
+                  <span className="text-sm">{connector.displayName}</span>
+                </div>
+              ))}
             </div>
-            <ScrollArea className="h-[calc(100%-2rem)]">
-              <div className="space-y-2 pr-4">
-                {activatedConnectors.map((connector) => (
-                  <button
-                    key={connector.connectorName}
-                    onClick={() => handleToggleConnector(connector)}
-                    className={`w-full flex items-center p-2 rounded-lg transition-colors
-                      ${
-                        selectedConnectors.has(connector.connectorName)
-                          ? "bg-primary/10 text-primary"
-                          : "hover:bg-muted"
-                      }`}
-                  >
-                    <Image 
-                      src={`/logos/${connector.connectorName}.svg`}
-                      alt={connector.connectorDisplayName}
-                      width={15}
-                      height={15}
-                      className="mr-2"
-                    />
-                    <span className="text-sm truncate">
-                      {connector.connectorDisplayName}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </ScrollArea>
           </div>
 
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-sm font-medium block">Connected Agents</label>
-            </div>
-            <ScrollArea className="h-[120px]">
-              <div className="space-y-2 pr-4">
-                {agents.filter(a => a !== selectedAgent).map((agent) => (
-                  <button
-                    key={agent.agentName}
-                    onClick={() => handleToggleLinkedAgent(agent.id)}
-                    className={`w-full flex items-center p-2 rounded-lg transition-colors
-                      ${
-                        linkedAgentIds.has(agent.id)
-                          ? "bg-primary/10 text-primary"
-                          : "hover:bg-muted"
-                      }`}
+          {/* Linked Agents Section */}
+          <div className="space-y-2">
+            <Label>Linked Agents</Label>
+            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+              {agents
+                .filter((agent) => agent.id !== selectedAgent.id)
+                .map((agent) => (
+                  <div
+                    key={agent.id}
+                    className={`flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer transition-colors ${
+                      linkedAgentIds.has(agent.id) ? "bg-accent" : ""
+                    }`}
+                    onClick={() => {
+                      handleToggleLinkedAgent(agent.id);
+                      setHasUnsavedChanges(true);
+                    }}
                   >
-                    <span className="text-sm truncate">{agent.agentName}</span>
-                  </button>
+                    <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-medium">
+                        {agent.agentName.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <span className="text-sm">{agent.agentName}</span>
+                  </div>
                 ))}
-              </div>
-            </ScrollArea>
+            </div>
           </div>
         </div>
+      </ScrollArea>
 
-        <div className="mt-4 pt-4 border-t sticky bottom-0 bg-card">
-          <Button className="w-full" onClick={onUpdateAgent}>
-            Save Changes
-          </Button>
-        </div>
-      </CardContent>
+      {/* Save Changes Button */}
+      <div className="p-4 border-t mt-auto">
+        <Button
+          className="w-full"
+          onClick={handleSaveChanges}
+          disabled={isUpdating || !hasUnsavedChanges}
+        >
+          {isUpdating ? "Saving..." : hasUnsavedChanges ? "Save Changes" : "No Changes"}
+        </Button>
+      </div>
     </Card>
   );
 } 

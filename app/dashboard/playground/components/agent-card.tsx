@@ -39,7 +39,7 @@ export function AgentCard({ agent, onSelect, onDelete }: AgentCardProps) {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  Model: {agent.selectedModel.label}
+                  Model: {agent.selectedModel.name}
                 </p>
               </CardContent>
             </Card>

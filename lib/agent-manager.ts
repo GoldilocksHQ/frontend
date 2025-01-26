@@ -1,13 +1,33 @@
 import { UUID } from "crypto";
 import { APIKeyManager } from "./api-key-manager";
-import { AgentJSON, AgentRequestBody, AgentExecution, Message, ModelOption, Task, AgentExecutionType } from "./types";
+import { 
+  AgentJSON, 
+  AgentMessage, 
+  AgentErrorContext,
+  ModelOption, 
+  MessageType, 
+  Message,
+  ChainType,
+  ChainConfig,
+  AgentTaskList,
+  AgentTask,
+  ToolResult,
+  Thread,
+  TaskList,
+  TaskListStatus,
+  TaskStatus
+} from "./types";
+import { ConversationManager } from './conversation-manager';
+import { AgentError, ErrorTracker } from './error-tracker';
+import { ChainFactory } from './chain/chain-factory';
+import { ToolRegistry } from './tools/tool-registry';
+import { Task } from "./types";
 
 // Constants
 export const modelOptions: ModelOption[] = [
-  { value: "gpt-4o-mini", label: "GPT-4o Mini", provider: "OpenAI" },
-  { value: "gpt-4", label: "GPT-4", provider: "OpenAI" },
-  { value: "o1-mini", label: "GPT-o1 Mini", provider: "OpenAI" },
-  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo", provider: "OpenAI" },
+  { name: "gpt-4o-mini", provider: "openai", contextWindow: 16384, maxTokens: 16384 },
+  { name: "gpt-4", provider: "openai", contextWindow: 8192, maxTokens: 8192 },
+  { name: "gpt-3.5-turbo", provider: "openai", contextWindow: 4096, maxTokens: 4096 },
 ];
 
 export const judgementSchema = {
@@ -44,11 +64,19 @@ export const taskSchema = {
                 type: "number",
                 description: "The step number of the task",
               },
-              sourceAgent: {
+              sourceAgentId: {
+                type: "string",
+                description: "Id of the agent creating the task",
+              },
+              sourceAgentName: {
                 type: "string",
                 description: "Name of the agent creating the task",
               },
-              targetAgent: {
+              targetAgentId: {
+                type: "string",
+                description: "Id of the agent that should execute the task",
+              },
+              targetAgentName: {
                 type: "string",
                 description: "Name of the agent that should execute the task",
               },
@@ -57,7 +85,7 @@ export const taskSchema = {
                 description: "The instruction or task to be executed",
               },
             },
-            required: ["step", "sourceAgent", "targetAgent", "instruction"],
+            required: ["step", "sourceAgentId", "sourceAgentName", "targetAgentId", "targetAgentName", "instruction"],
             additionalProperties: false,
           },
         },
@@ -69,31 +97,22 @@ export const taskSchema = {
   },
 };
 
-class AgentError extends Error {
-  constructor(
-    message: string, 
-    public readonly context?: {
-      error?: unknown;
-      agentName?: string;
-      status?: number;
-      taskChain?: Task[];
-      mode?: string;
-      depth?: number;
-      currentTask?: Task;
-    }
-  ) {
-    super(message);
-    this.name = 'AgentError';
-  }
-}
-
 export class AgentManager {
   private static instance: AgentManager | null = null;
   private apiKeyManager: APIKeyManager | null = null;
-  private headers: HeadersInit | undefined;
+  private conversationManager: ConversationManager;
+  private errorTracker: ErrorTracker;
+  private chainFactory: ChainFactory;
+  private toolRegistry: ToolRegistry;
   public agents: Agent[] = [];
-  public taskChain: Task[] = [];
   private logger: Console = console;
+
+  private constructor() {
+    this.conversationManager = ConversationManager.getInstance();
+    this.errorTracker = ErrorTracker.getInstance();
+    this.chainFactory = ChainFactory.getInstance();
+    this.toolRegistry = ToolRegistry.getInstance();
+  }
 
   static async getInstance(): Promise<AgentManager> {
     if (!AgentManager.instance) {
@@ -105,14 +124,11 @@ export class AgentManager {
 
   private async initialize() {
     try {
-      this.apiKeyManager = await APIKeyManager.getInstance();
-      this.headers = {
-        "Content-Type": "application/json",
-        "x-api-key": this.apiKeyManager?.getKey(),
-      };
+    this.apiKeyManager = await APIKeyManager.getInstance();
+      await this.toolRegistry.initialize();
     } catch (error) {
       this.logger.error('Failed to initialize AgentManager:', error);
-      throw new AgentError('Failed to initialize AgentManager', { error });
+      throw new AgentError('Failed to initialize AgentManager', { error } as AgentErrorContext);
     }
   }
 
@@ -124,21 +140,21 @@ export class AgentManager {
   createAgent(agent: Agent) {
     try {
       this.validateAgent(agent);
-      this.agents.push(agent);
+    this.agents.push(agent);
       this.logger.info(`Agent created: ${agent.agentName}`);
     } catch (error) {
       this.logger.error('Failed to create agent:', error);
-      throw new AgentError('Failed to create agent', { error, agentName: agent.agentName });
+      throw new AgentError('Failed to create agent', { error, agentName: agent.agentName } as AgentErrorContext);
     }
   }
 
   deleteAgent(agent: Agent) {
     try {
-      this.agents = this.agents.filter((a) => a !== agent);
+    this.agents = this.agents.filter((a) => a !== agent);
       this.logger.info(`Agent deleted: ${agent.agentName}`);
     } catch (error) {
       this.logger.error('Failed to delete agent:', error);
-      throw new AgentError('Failed to delete agent', { error, agentName: agent.agentName });
+      throw new AgentError('Failed to delete agent', { error, agentName: agent.agentName } as AgentErrorContext);
     }
   }
 
@@ -146,310 +162,295 @@ export class AgentManager {
     return this.agents.find(agent => agent.id === agentId);
   }
 
-  private isValidJSON(str: string): boolean {
+  async kickOffConversation(targetAgent: Agent, mode: string = "task", threadId?: UUID, sourceAgent?: Agent, judgementQuestion?: string, depth: number = 0): Promise<AgentMessage | AgentError> {
     try {
-      JSON.parse(str);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async kickOffMessaging(agent: Agent, mode: string = "task", judgementQuestion?: string, depth: number = 0): Promise<Message | AgentError> {
-    try {
-      // Add maximum recursion depth protection
       if (depth > 10) {
         this.logger.error('Maximum recursion depth reached in kickOffMessaging');
         return new AgentError('Maximum recursion depth reached', { 
-          agentName: agent.agentName,
+          agentName: targetAgent.agentName,
           mode,
           depth 
-        });
+        } as AgentErrorContext);
       }
 
-      if (!this.apiKeyManager) {
-        await this.initialize();
+      // Check if there are any messages to process
+      if (!targetAgent.messages || targetAgent.messages.length === 0) {
+        this.logger.error('No messages to process');
+        return new AgentError('No messages to process', { 
+          agentName: targetAgent.agentName,
+          mode 
+        } as AgentErrorContext);
       }
 
-      const systemPrompt = await this.setSystemPrompt(agent);
-      const response = await this.sendMessage(agent, systemPrompt, mode, judgementQuestion);
+      const chainConfig: ChainConfig = {
+        type: this.getChainType(mode),
+        model: targetAgent.selectedModel,
+        memory: true,
+        tools: Array.from(targetAgent.selectedTools)
+      };
 
-      if (response instanceof AgentError) {
-        return response;
+      const chain = this.chainFactory.createChain(chainConfig);
+
+      if (!threadId) {
+        threadId = this.conversationManager.createThread().id;
+      }
+      
+      // Get the last message content
+      const lastMessage = targetAgent.messages[targetAgent.messages.length - 1];
+      if (!lastMessage || !lastMessage.content) {
+        this.logger.error('Invalid message format');
+        return new AgentError('Invalid message format', { 
+          agentName: targetAgent.agentName,
+          mode 
+        } as AgentErrorContext);
       }
 
-      const responseData = await response.json();
-      this.logger.info('Agent API response:', { 
-        agent: agent.agentName, 
-        mode,
-        depth,
-        response: responseData 
-      });
-
-      if (responseData) {
-        // Check if the content is JSON
-        if (this.isValidJSON(responseData.content)) {
-          const content = JSON.parse(responseData.content);
+      // Execute the chain based on mode
+      switch (mode) {
+        case "task_planning": {
+          const result = await chain.invoke({ input: lastMessage.content });
+          const agentTaskList = result.agentTaskList as AgentTaskList;
           
-          // Only process as task chain if it has the expected structure
-          if (content.tasks && Array.isArray(content.tasks)) {
-            this.taskChain = content.tasks as Task[];
-            
-            if (this.taskChain) {
-              const executionFlow = await this.executeTaskChain(this.taskChain);
-              if (executionFlow instanceof AgentError) {
-                return executionFlow;
-              }
-            }
-          }
-        }
-        return responseData;
-      }
+          // Record the plan in conversation store
+          const message = this.conversationManager.addMessage({
+            threadId,
+            role: "assistant",
+            content: JSON.stringify(agentTaskList),
+            messageType: MessageType.TASK_PLANNING,
+            targetAgentId: targetAgent.id,
+            sourceAgentId: sourceAgent?.id,
+            timestamp: Date.now()
+          } as Omit<Message, 'id'>);
 
-      return { role: "assistant", content: "No response received" };
+
+          // Create task list
+          const taskList = await this.createTaskList(targetAgent, threadId, agentTaskList);
+          
+          console.log(taskList);
+          return message;
+
+          // Execute each task
+          // let taskOutputSummary: string = "";
+          // let lastStepOutput: string = `Goal: ${taskPlan.goal}\n\n`;
+          // for (const task of taskPlan.tasks) {
+          //   const result = await this.executeTask(agent, task, lastStepOutput);
+          //   lastStepOutput = result.result;
+          //   taskOutputSummary += `
+          //     Task ${task.description}
+          //     Output: ${result.result}
+          //   `;
+          // }
+
+          // Add the last step output to the conversation
+          // const messageId = this.conversationManager.addMessage({
+          //   threadId,
+          //   role: "assistant",
+          //   content: taskOutputSummary,
+          //   messageType: MessageType.AGENT_TO_USER,
+          //   sourceAgentId: agent.id,
+          //   timestamp: Date.now()
+          // } as Omit<Message, 'id'>);
+          // TODO: Need to send message to Agent for final output, but this workflow needs to go outside of this function
+
+          // return {
+          //   role: "assistant",
+          //   content: `Task execution completed. See message ${messageId} for details.`,
+          //   timestamp: Date.now()
+          // };
+        }
+
+        case "task_execution": {
+          // Handle task execution
+          const result = await chain.invoke({ 
+            input: {
+              task: targetAgent.messages[targetAgent.messages.length - 1].content,
+            }
+          });
+          const toolResult = result.toolResult as ToolResult;
+
+          const message = this.conversationManager.addMessage({
+            threadId,
+            role: "assistant",
+            content: JSON.stringify(toolResult),
+            messageType: MessageType.TASK_EXECUTION,
+            targetAgentId: targetAgent.id,
+            sourceAgentId: sourceAgent?.id,
+            timestamp: Date.now()
+          } as Omit<Message, 'id'>);
+
+          return message;
+
+          // return {
+          //   role: "assistant",
+          //   content: result.response,
+          //   timestamp: Date.now()
+          // };
+        }
+
+        case "conversation": {
+          const result = await chain.invoke({ 
+            input: {
+              content: targetAgent.messages[targetAgent.messages.length - 1].content,
+              messageType: targetAgent.id ? MessageType.AGENT_TO_USER : MessageType.USER_TO_AGENT,
+            }
+          });
+          const conversationResponse = result.conversationResponse as string;
+
+          const message = this.conversationManager.addMessage({
+            threadId,
+            role: "assistant",
+            content: conversationResponse,
+            messageType: targetAgent.id ? MessageType.AGENT_TO_USER : MessageType.USER_TO_AGENT,
+            targetAgentId: targetAgent.id,
+            sourceAgentId: sourceAgent?.id,
+            timestamp: Date.now()
+          } as Omit<Message, 'id'>);
+
+          return message;
+        }
+
+        case "judgement": {
+          if (!judgementQuestion) throw new Error('Judgement question is required');
+          
+          const result = await chain.invoke({ 
+            input: {
+              requirement: judgementQuestion,
+              response: targetAgent.messages[targetAgent.messages.length - 1].content
+            }
+          });
+
+          const judgementResponse = result.judgement as Message;
+          const message = this.conversationManager.addMessage({
+            threadId,
+            role: "assistant",
+            content: JSON.stringify(judgementResponse),
+            messageType: MessageType.JUDGEMENT,
+            targetAgentId: targetAgent.id,
+            sourceAgentId: sourceAgent?.id,
+            timestamp: Date.now()
+          } as Omit<Message, 'id'>);
+
+          return message;
+        }
+
+        default:
+          throw new Error(`Unknown mode: ${mode}`);
+      }
     } catch (error) {
       this.logger.error('Error in kickOffMessaging:', error);
+      this.errorTracker.recordError(
+        targetAgent.id,
+        error,
+        `Failed to process message (mode: ${mode}, depth: ${depth})`
+      );
       throw new AgentError(
         'Failed to process message',
-        { error, agentName: agent.agentName, mode, depth }
+        { error, agentName: targetAgent.agentName, mode, depth } as AgentErrorContext
       );
     }
   }
 
-  private async setSystemPrompt(agent: Agent): Promise<string> {
-    try {
-      if (agent.linkedAgentIds.size === 0) return agent.systemPrompt;
-
-      const linkedAgentsMenu = this.createdLinkedAgentMenu(agent.linkedAgentIds);
-      return `${agent.systemPrompt}\n\nYour name is ${agent.agentName}. Following are the agents you can use:\n\n${linkedAgentsMenu}`;
-    } catch (error) {
-      this.logger.error('Error setting system prompt:', error);
-      throw new AgentError('Failed to set system prompt', { error, agentName: agent.agentName });
-    }
-  }
-
-  private async sendMessage(agent: Agent, systemPrompt: string, mode: string, judgementQuestion?: string): Promise<Response | AgentError> {
-    try {
-      const body: AgentRequestBody = {
-        model: agent.selectedModel.value,
-        messages: agent.messages,
-        systemPrompt,
-        userId: this.apiKeyManager?.getUserId() || "",
-      };
-
-      // Add tools if the agent has any
-      if (agent.selectedTools.size > 0) {
-        body.selectedTools = Array.from(agent.selectedTools);
+  async createTaskList(agent: Agent, threadId: UUID, agentTaskList: AgentTaskList): Promise<TaskList> {
+    const taskList: TaskList = {
+      id: crypto.randomUUID() as UUID,
+      threadId: threadId,
+      sourceAgentId: agent.id,
+      tasks: [],
+      status: TaskListStatus.PENDING,
+      startTime: Date.now(),
+      executionFlow: [],
+      metadata: {
+        goal: agentTaskList.goal,
+        reasoning: agentTaskList.reasoning
       }
-
-      // Add task schema if the agent has any linked agents and mode is task
-      if (agent.linkedAgentIds.size > 0 && mode === "task") {
-        body.firstResponseFormat = taskSchema;
-      } else if (mode === "judgement" && judgementQuestion) {
-        body.firstResponseFormat = judgementSchema;
-        body.messages.push({ role: "user", content: judgementQuestion });
-      }
-
-      this.logger.info('Sending message to API:', { 
-        agent: agent.agentName, 
-        model: body.model,
-        toolsCount: body.selectedTools?.length
-      });
-
-      return fetch("/api/agents", {
-        method: "POST",
-        headers: this.headers,
-        body: JSON.stringify(body),
-      });
-    } catch (error) {
-      this.logger.error('Error sending message:', error);
-      return new AgentError('Failed to send message', { error, agentName: agent.agentName });
-    }
-  }
-
-  private async executeTaskChain(taskChain: Array<Task>): Promise<Array<AgentExecution> | AgentError> {
-    const executionFlow: Array<AgentExecution> = [];
-    let agentInstruction: Message = {
-      role: "user",
-      content: `Instruction:\nStep ${taskChain[0].step}: ${taskChain[0].instruction}`,
     };
 
+    for (const agentTask of agentTaskList.tasks) {
+      const task: Task = {
+        id: crypto.randomUUID() as UUID,
+        listId: taskList.id,
+        step: agentTask.step,
+        sourceAgentId: agent.id,
+        targetAgentId: agentTask.requiredAgent,
+        instruction: agentTask.instruction,
+        status: TaskStatus.PENDING,
+        startTime: Date.now(),
+        metadata: {
+          goal: agentTaskList.goal,
+          reasoning: agentTaskList.reasoning
+        },
+      }
+      taskList.tasks.push(task);
+    }
+
+    return taskList;
+  }
+
+
+  async executeTask(agent: Agent, task: AgentTask, lastStepOutput: string): Promise<ToolResult> {
     try {
-      for (let i = 0; i < taskChain.length; i++) {
-        const task = taskChain[i];
-        const sourceAgent = this.agents.find(agent => agent.agentName === task.sourceAgent);
-        const targetAgent = this.agents.find(agent => agent.agentName === task.targetAgent);
-        
-        if (!sourceAgent || !targetAgent) {
-          throw new AgentError(
-            `Agent not found: ${!sourceAgent ? task.sourceAgent : task.targetAgent}`,
-            { taskChain, currentTask: task }
-          );
-        }
+      const chain = this.chainFactory.createChain({
+        type: ChainType.TASK_EXECUTION,
+        model: agent.selectedModel,
+        memory: true,
+        tools: task.tools
+      });
 
-        this.logger.info('Executing task:', { 
-          step: task.step,
-          sourceAgent: task.sourceAgent,
-          targetAgent: task.targetAgent
-        });
-
-        targetAgent.addMessage(agentInstruction);
-        executionFlow.push({
-          senderAgent: sourceAgent.agentName,
-          receiverAgent: targetAgent.agentName,
-          content: agentInstruction.content,
-          type: AgentExecutionType.INSTRUCTION,
-        });
-
-        let taskCompleted = false;
-        let mentionTask = false;
-        let targetResponse: Message | AgentError = {
-          role: "assistant",
-          content: "No response from target agent"
-        };
-        let judgementCount = 0;
-        const maxAttempts = 3; // Limit the number of attempts
-
-        while (!taskCompleted && judgementCount < maxAttempts) {
-          // Get response from target agent with depth parameter
-          targetResponse = await this.kickOffMessaging(targetAgent, "conversation", undefined, judgementCount + 1);
-          if (targetResponse instanceof AgentError) {
-            this.logger.error('Error executing task:', targetResponse);
-            return targetResponse;
-          }
-
-          targetAgent.addMessage({ role: "assistant", content: targetResponse.content });
-          executionFlow.push({
-            senderAgent: targetAgent.agentName,
-            receiverAgent: sourceAgent.agentName,
-            content: targetResponse.content,
-            type: AgentExecutionType.RESPONSE,
-          });
-
-          if (!mentionTask) {
-            mentionTask = true;
-            sourceAgent.addMessage({ 
-              role: "assistant", 
-              content: `Your instruction:\nstep ${task.step}: ${task.instruction}` 
-            });
-          }
-
-          sourceAgent.addMessage({ 
-            role: "assistant", 
-            content: `Outputs from ${targetAgent.agentName}:\n${targetResponse.content}` 
-          });
-
-          // Ask for judgement with depth parameter
-          const judgementResponse = await this.kickOffMessaging(
-            sourceAgent, 
-            "judgement", 
-            "Does the above provides what you need?",
-            judgementCount + 1
-          );
-
-          if (judgementResponse instanceof AgentError) {
-            this.logger.error('Error in judgement:', judgementResponse);
-            return judgementResponse;
-          }
-
-          try {
-            const judgementContent = JSON.parse(judgementResponse.content);
-            if (judgementContent.judgement === true) {
-              taskCompleted = true;
-            } else {
-              judgementCount++;
-              if (judgementCount < maxAttempts) {
-                // Get clarification with depth parameter
-                const sourceResponse = await this.kickOffMessaging(
-                  sourceAgent, 
-                  "conversation",
-                  undefined,
-                  judgementCount + 1
-                );
-                
-                if (sourceResponse instanceof AgentError) {
-                  this.logger.error('Error getting clarification:', sourceResponse);
-                  return sourceResponse;
-                }
-
-                sourceAgent.addMessage({ role: "assistant", content: sourceResponse.content });
-                targetAgent.addMessage({ role: "user", content: sourceResponse.content });
-                executionFlow.push({
-                  senderAgent: targetAgent.agentName,
-                  receiverAgent: sourceAgent.agentName,
-                  content: sourceResponse.content,
-                  type: AgentExecutionType.INSTRUCTION,
-                });
-              }
-            }
-          } catch (error) {
-            this.logger.error('Error parsing judgement:', error);
-            judgementCount++;
-          }
-        }
-
-        if (!taskCompleted) {
-          this.logger.warn('Task not completed after maximum attempts', {
-            task,
-            attempts: maxAttempts
-          });
-        }
-
-        if (i + 1 < taskChain.length) {
-          agentInstruction = {
-            role: "user",
-            content: `Instruction:\nStep ${taskChain[i + 1].step}: ${taskChain[i + 1].instruction}\n\nOutputs from ${targetAgent.agentName}:\n${targetResponse.content}`
-          };
-        }
-      }
-
-      const primarySourceAgent = this.agents.find(agent => agent.agentName === taskChain[0].sourceAgent)
-      if (primarySourceAgent) {
-        primarySourceAgent.addMessage({ 
-          role: "assistant", 
-          content: `Task execution completed. Summary: ${JSON.stringify(executionFlow)}. Provide your final output.`
-        });
-        const finalResult = await this.kickOffMessaging(primarySourceAgent, "conversation");
-        if (finalResult instanceof AgentError) {
-          this.logger.error('Error getting final result:', finalResult);
-          return finalResult;
-        }
-        primarySourceAgent?.addMessage({ 
-          role: "assistant", 
-          content: finalResult.content
-        });
-      }
-      
-      return executionFlow;
+      const lastStepResult = lastStepOutput ? `\n\nLast step result: ${lastStepOutput}` : '';
+      const result = await chain.invoke({ task: `${task.instruction}${lastStepResult}` });
+      return result.result as ToolResult;
     } catch (error) {
-      this.logger.error('Error executing task chain:', error);
-      throw new AgentError('Failed to execute task chain', { error, taskChain });
+      this.logger.error('Error executing task:', error);
+      throw new AgentError(
+        'Failed to execute task',
+        { error, agentName: agent.agentName, task } as AgentErrorContext
+      );
     }
   }
 
-  private createdLinkedAgentMenu(linkedAgentIds: Set<UUID>): string {
-    try {
-      const allLinkedAgentInfo = Array.from(linkedAgentIds)
-        .map((agentId) => {
-          const agent = this.getAgentById(agentId);
-          if (!agent) {
-            this.logger.warn(`Linked agent not found: ${agentId}`);
-            return null;
-          }
-          return {
-            agentId: agent.id,
-            agentName: agent.agentName,
-            agentDescription: agent.agentDescription,
-            agentTools: Array.from(agent.selectedTools || []),
-          };
-        })
-        .filter(Boolean);
-
-      return JSON.stringify(allLinkedAgentInfo);
-    } catch (error) {
-      this.logger.error('Error creating linked agent menu:', error);
-      throw new AgentError('Failed to create linked agent menu', { error });
+  private getChainType(mode: string): ChainType {
+    switch (mode) {
+      case "task_planning":
+        return ChainType.TASK_PLANNING;
+      case "task_execution":
+        return ChainType.TASK_EXECUTION;
+      case "conversation":
+        return ChainType.CONVERSATION;
+      case "judgement":
+        return ChainType.JUDGEMENT;
+      default:
+        throw new Error(`Unknown mode: ${mode}`);
     }
+  }
+
+  // Error management methods
+  recordAgentError(agentId: UUID, error: string | Error | unknown, context?: string): void {
+    this.errorTracker.recordError(agentId, error, context);
+  }
+
+  getAgentErrors(agentId: UUID): AgentError[] {
+    return this.errorTracker.getErrors(agentId);
+  }
+
+  clearAgentErrors(agentId: UUID): void {
+    this.errorTracker.clearErrors(agentId);
+  }
+
+  // Public methods for thread management
+  public createThread(): Thread {
+    return this.conversationManager.createThread();
+  }
+
+  public addMessageToThread(message: Omit<Message, 'id'>) {
+    return this.conversationManager.addMessage(message);
+  }
+
+  public clearThread(threadId: UUID) {
+    return this.conversationManager.clearThread(threadId);
+  }
+
+  public getThread(threadId: UUID): Thread | null {
+    return this.conversationManager.getThread(threadId);
   }
 }
 
@@ -461,7 +462,8 @@ export class Agent {
   public systemPrompt: string;
   public selectedTools: Set<string>;
   public linkedAgentIds: Set<UUID>;
-  public messages: Array<{ role: string; content: string }>;
+  public messages: AgentMessage[];
+  public chainConfig?: ChainConfig;
 
   constructor(
     id: UUID,
@@ -470,7 +472,8 @@ export class Agent {
     selectedModel: ModelOption,
     systemPrompt: string,
     selectedTools: Set<string>,
-    linkedAgentIds: Set<UUID>
+    linkedAgentIds: Set<UUID>,
+    chainConfig?: ChainConfig
   ) {
     this.id = id;
     this.agentName = agentName;
@@ -479,6 +482,7 @@ export class Agent {
     this.systemPrompt = systemPrompt;
     this.selectedTools = selectedTools;
     this.linkedAgentIds = linkedAgentIds;
+    this.chainConfig = chainConfig;
     this.messages = [];
   }
 
@@ -492,6 +496,7 @@ export class Agent {
       selectedTools: Array.from(this.selectedTools),
       linkedAgentIds: Array.from(this.linkedAgentIds),
       messages: this.messages,
+      chainConfig: this.chainConfig
     };
   }
 
@@ -503,9 +508,10 @@ export class Agent {
       json.selectedModel,
       json.systemPrompt,
       new Set(json.selectedTools),
-      new Set(json.linkedAgentIds)
+      new Set(json.linkedAgentIds),
+      json.chainConfig
     );
-    agent.messages = json.messages || [];
+    agent.messages = json.messages;
     return agent;
   }
 
@@ -533,15 +539,21 @@ export class Agent {
     this.systemPrompt = systemPrompt;
   }
 
-  addMessage(message: { role: string; content: string }) {
-    this.messages.push(message);
+  addMessage(message: AgentMessage) {
+    this.messages.push({
+      ...message,
+      timestamp: Date.now()
+    });
   }
 
   removeMessage(index: number) {
     this.messages.splice(index, 1);
   }
 
-  editMessage(index: number, message: { role: string; content: string }) {
-    this.messages[index] = message;
+  editMessage(index: number, message: AgentMessage) {
+    this.messages[index] = {
+      ...message,
+      timestamp: Date.now()
+    };
   }
 }
