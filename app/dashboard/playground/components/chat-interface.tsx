@@ -2,7 +2,7 @@ import { ArrowLeft, Loader2, History, RefreshCw } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { AgentManager } from "@/lib/agent-manager";
 import { AgentError } from "@/lib/error-tracker";
-import { MessageType, Thread, TaskList, Task } from "@/lib/types";
+import { MessageType, Thread, TaskList, Task, Message } from "@/lib/types";
 import type { Agent } from "@/lib/agent-manager";
 import {
   Dialog,
@@ -25,11 +25,12 @@ interface ChatInterfaceProps {
   agentManager: AgentManager | null;
   errors: AgentError[];
   currentThread: Thread | null;
+  historicMessages: Message[];
   input: string;
   setInput: (input: string) => void;
   isWorking: boolean;
   workingStatus: string;
-  onSend: () => void;
+  onSend: (input: string) => Promise<void>;
   onClearMessages: () => void;
   onBack: () => void;
   onError: (error: string, context?: string) => void;
@@ -40,6 +41,7 @@ export function ChatInterface({
   selectedAgent,
   errors: agentErrors,
   currentThread,
+  historicMessages,
   input,
   setInput,
   isWorking,
@@ -115,8 +117,8 @@ export function ChatInterface({
                   </TabsList>
                   <div className="mt-4">
                     <TabsContent value="messages" className="mt-0 space-y-4">
-                      {currentThread?.messages.map((message, i) => (
-                        <div key={i} className="p-4 rounded-lg bg-muted">
+                      {historicMessages.concat(currentThread?.messages || []).map((message: Message, i: number) => (
+                        <div key={`history-${message.id}-${i}`} className="p-4 rounded-lg bg-muted">
                           <div className="font-medium text-sm mb-2 text-muted-foreground flex items-center justify-between">
                             <span>
                               {message.messageType === MessageType.SYSTEM && "System Prompt"}
@@ -135,8 +137,8 @@ export function ChatInterface({
                       ))}
                     </TabsContent>
                     <TabsContent value="tasks" className="mt-0 space-y-4">
-                      {currentThread?.taskChains.map((taskChain, i) => (
-                        <div key={i} className="p-4 rounded-lg bg-muted">
+                      {currentThread?.taskLists.map((taskChain, i) => (
+                        <div key={`task-${taskChain.id}-${i}`} className="p-4 rounded-lg bg-muted">
                           {renderTaskChain(taskChain)}
                         </div>
                       ))}
@@ -148,7 +150,7 @@ export function ChatInterface({
                         </div>
                       ) : (
                         agentErrors.map((error, i) => (
-                          <div key={i} className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                          <div key={`error-${i}-${error.timestamp}`} className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
                             <div className="font-medium text-sm mb-2 flex items-center justify-between">
                               <span className="text-destructive">Error</span>
                               <span className="text-xs opacity-50">
@@ -185,8 +187,8 @@ export function ChatInterface({
       <CardContent className="flex-1 flex flex-col min-h-0 py-4">
         <ScrollArea ref={scrollAreaRef} className="flex-1 pr-4">
           <div className="space-y-4">
-            {currentThread?.messages.map((message, i) => (
-              <div key={i} className={`flex items-start gap-3 ${message.role === "assistant" ? "flex-row" : "flex-row-reverse"}`}>
+            {historicMessages.concat(currentThread?.messages || []).map((message, i) => (
+              <div key={`chat-${message.id}-${i}`} className={`flex items-start gap-3 ${message.role === "assistant" ? "flex-row" : "flex-row-reverse"}`}>
                 <Avatar className="mt-1 flex-shrink-0">
                   <AvatarFallback>{message.role === "assistant" ? "AI" : "U"}</AvatarFallback>
                 </Avatar>
@@ -219,7 +221,7 @@ export function ChatInterface({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (!isWorking) onSend();
+                  if (!isWorking && input.trim()) onSend(input);
                 } else if (e.key === "Enter" && e.shiftKey) {
                   e.preventDefault();
                   setInput(handleNewline(input));
@@ -229,7 +231,7 @@ export function ChatInterface({
               className="min-h-[80px] flex-1 resize-none"
             />
             <Button 
-              onClick={onSend} 
+              onClick={() => onSend(input)} 
               disabled={isWorking || !input.trim()}
               className="self-center"
             >

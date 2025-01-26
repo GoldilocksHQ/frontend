@@ -1,120 +1,136 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Info } from "lucide-react";
-import { Agent } from "@/lib/agent-manager";
-import { UserActivationMappedConnector, ModelOption, ChainType } from "@/lib/types";
+import { Agent, modelOptions } from "@/lib/agent-manager";
+import { UserActivationMappedConnector, ChainType, ModelOption } from "@/lib/types";
 import { UUID } from "crypto";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import Image from "next/image";
+import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface AgentConfigSidebarProps {
-  agents: Agent[];
-  selectedAgent: Agent;
-  selectedModel: ModelOption;
-  handleModelChange: (value: string) => void;
-  systemPrompt: string;
-  setSystemPrompt: (prompt: string) => void;
-  modelOptions: ModelOption[];
-  handleUpdateAgent: () => void;
-  isUpdating: boolean;
+  agent: Agent;
   connectors: UserActivationMappedConnector[];
-  selectedConnectors: Set<string>;
-  handleToggleConnector: (connector: UserActivationMappedConnector) => void;
-  linkedAgentIds: Set<UUID>;
-  handleToggleLinkedAgent: (agentId: UUID) => void;
-  selectedChainType: ChainType;
-  setSelectedChainType: (chainType: ChainType) => void;
+  linkedAgents: Agent[];
+  onSave: (agent: Agent) => void;
 }
 
 export function AgentConfigSidebar({
-  agents,
-  selectedAgent,
-  selectedModel,
-  handleModelChange,
-  systemPrompt,
-  setSystemPrompt,
-  modelOptions,
-  handleUpdateAgent,
-  isUpdating,
+  agent,
   connectors,
-  selectedConnectors,
-  handleToggleConnector,
-  linkedAgentIds,
-  handleToggleLinkedAgent,
-  selectedChainType,
-  setSelectedChainType,
+  linkedAgents,
+  onSave,
 }: AgentConfigSidebarProps) {
-  const [isDescriptionDialogOpen, setIsDescriptionDialogOpen] = useState(false);
-  const [tempDescription, setTempDescription] = useState(selectedAgent.agentDescription);
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(agent.selectedTools);
+  const [linkedAgentIds, setLinkedAgentIds] = useState<Set<UUID>>(agent.linkedAgentIds);
+  const [selectedChainType, setSelectedChainType] = useState<ChainType>(
+    agent.chainConfig?.type || ChainType.CONVERSATION
+  );
+  const [selectedModel, setSelectedModel] = useState<ModelOption>(agent.selectedModel);
+  const [name, setName] = useState(agent.agentName);
+  const [description, setDescription] = useState(agent.agentDescription);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
 
-  const handleDescriptionUpdate = () => {
-    selectedAgent.agentDescription = tempDescription;
-    setHasUnsavedChanges(true);
-    setIsDescriptionDialogOpen(false);
-  };
+  // Effect to update state when agent changes
+  useEffect(() => {
+    setSelectedTools(agent.selectedTools);
+    setLinkedAgentIds(agent.linkedAgentIds);
+    setSelectedChainType(agent.chainConfig?.type || ChainType.CONVERSATION);
+    setSelectedModel(agent.selectedModel);
+    setName(agent.agentName);
+    setDescription(agent.agentDescription);
+  }, [agent]);
 
   const handleSaveChanges = () => {
-    handleUpdateAgent();
+    agent.editName(name);
+    agent.editDescription(description);
+    agent.selectModel(selectedModel);
+    agent.selectedTools = selectedTools;
+    agent.linkedAgentIds = linkedAgentIds;
+    agent.chainConfig = {
+      ...agent.chainConfig,
+      type: selectedChainType,
+      model: selectedModel,
+      memory: true,
+      tools: Array.from(selectedTools)
+    };
+    
+    onSave(agent);
     setHasUnsavedChanges(false);
   };
 
   return (
-    <Card className="w-80 flex flex-col h-full">
+    <Card className="w-80 flex flex-col">
+      <CardHeader className="py-4">
+        <CardTitle className="text-lg">Agent Configuration</CardTitle>
+      </CardHeader>
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-6">
-          {/* Agent Name and Description Section */}
+        <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label>Agent Name</Label>
             <div className="flex items-center gap-2">
-              <Input 
-                value={selectedAgent.agentName}
-                onChange={(e) => {
-                  selectedAgent.agentName = e.target.value;
-                  setHasUnsavedChanges(true);
-                }}
-                className="flex-1"
-              />
-              <Dialog open={isDescriptionDialogOpen} onOpenChange={setIsDescriptionDialogOpen}>
+              <Label>Name</Label>
+              <Dialog open={isDescriptionOpen} onOpenChange={setIsDescriptionOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Info className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" className="h-4 w-4">
+                    <Info className="h-3 w-3" />
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Agent Description</DialogTitle>
-                    <DialogDescription>Update the description for {selectedAgent.agentName}</DialogDescription>
+                    <DialogDescription>
+                      Describe the purpose and capabilities of this agent.
+                    </DialogDescription>
                   </DialogHeader>
                   <Textarea
-                    value={tempDescription}
-                    onChange={(e) => setTempDescription(e.target.value)}
-                    className="min-h-[100px]"
+                    value={description}
+                    onChange={(e) => {
+                      setDescription(e.target.value);
+                      setHasUnsavedChanges(true);
+                    }}
+                    placeholder="Agent description"
+                    className="min-h-[200px]"
                   />
-                  <div className="flex justify-end gap-2 mt-4">
-                    <Button variant="outline" onClick={() => setIsDescriptionDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleDescriptionUpdate}>Save</Button>
-                  </div>
                 </DialogContent>
               </Dialog>
             </div>
+            <Input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setHasUnsavedChanges(true);
+              }}
+              placeholder="Agent name"
+            />
           </div>
 
-          {/* Model Selection Section */}
           <div className="space-y-2">
             <Label>Model</Label>
-            <Select defaultValue="gpt-4o-mini" value={selectedModel.name} onValueChange={(value) => {
-              handleModelChange(value);
-              setHasUnsavedChanges(true);
-            }}>
+            <Select
+              value={selectedModel.name}
+              onValueChange={(value) => {
+                const model = modelOptions.find(m => m.name === value);
+                if (model) {
+                  setSelectedModel(model);
+                  setHasUnsavedChanges(true);
+                }
+              }}
+            >
               <SelectTrigger>
-                <SelectValue>{selectedModel.name}</SelectValue>
+                <SelectValue placeholder="Select model" />
               </SelectTrigger>
               <SelectContent>
                 {modelOptions.map((model) => (
@@ -126,108 +142,101 @@ export function AgentConfigSidebar({
             </Select>
           </div>
 
-          {/* Chain Type Selection */}
           <div className="space-y-2">
             <Label>Chain Type</Label>
-            <Select 
-              value={selectedChainType} 
-              onValueChange={(value) => {
-                setSelectedChainType(value as ChainType);
+            <Select
+              value={selectedChainType}
+              onValueChange={(value: ChainType) => {
+                setSelectedChainType(value);
                 setHasUnsavedChanges(true);
               }}
             >
               <SelectTrigger>
-                <SelectValue>{selectedChainType}</SelectValue>
+                <SelectValue placeholder="Select chain type" />
               </SelectTrigger>
               <SelectContent>
-                {Object.values(ChainType).map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
+                <SelectItem value={ChainType.CONVERSATION}>Conversation</SelectItem>
+                <SelectItem value={ChainType.TASK_PLANNING}>Task Planning</SelectItem>
+                <SelectItem value={ChainType.TASK_EXECUTION}>Task Execution</SelectItem>
+                <SelectItem value={ChainType.JUDGEMENT}>Judgement</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* System Prompt Section */}
-          <div className="space-y-2">
-            <Label>System Prompt</Label>
-            <Textarea
-              value={systemPrompt}
-              onChange={(e) => {
-                setSystemPrompt(e.target.value);
-                setHasUnsavedChanges(true);
-              }}
-              className="min-h-[100px] resize-none"
-            />
-          </div>
-
-          {/* Tools Section */}
           <div className="space-y-2">
             <Label>Tools</Label>
-            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+            <div className="space-y-1">
               {connectors.map((connector) => (
                 <div
-                  key={connector.name}
-                  className={`flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer transition-colors ${
-                    selectedConnectors.has(connector.name) ? "bg-accent" : ""
-                  }`}
+                  key={connector.id}
+                  className={cn(
+                    "flex items-center gap-2 p-2 rounded-lg transition-colors cursor-pointer text-sm",
+                    selectedTools.has(connector.id) 
+                      ? "bg-primary/10 hover:bg-primary/15" 
+                      : "hover:bg-muted"
+                  )}
                   onClick={() => {
-                    handleToggleConnector(connector);
+                    const newTools = new Set(selectedTools);
+                    if (newTools.has(connector.id)) {
+                      newTools.delete(connector.id);
+                    } else {
+                      newTools.add(connector.id);
+                    }
+                    setSelectedTools(newTools);
                     setHasUnsavedChanges(true);
                   }}
                 >
-                  <Image 
-                    src={`/logos/${connector.name}.svg`}
-                    alt={connector.displayName}
-                    width={16}
-                    height={16}
-                    className="flex-shrink-0"
+                  <img 
+                    src={`/logos/${connector.name}.svg`} 
+                    alt={connector.name}
+                    className="w-5 h-5"
                   />
-                  <span className="text-sm">{connector.displayName}</span>
+                  <span className="flex-1">{connector.displayName}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Linked Agents Section */}
           <div className="space-y-2">
             <Label>Linked Agents</Label>
-            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
-              {agents
-                .filter((agent) => agent.id !== selectedAgent.id)
-                .map((agent) => (
-                  <div
-                    key={agent.id}
-                    className={`flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer transition-colors ${
-                      linkedAgentIds.has(agent.id) ? "bg-accent" : ""
-                    }`}
-                    onClick={() => {
-                      handleToggleLinkedAgent(agent.id);
-                      setHasUnsavedChanges(true);
-                    }}
-                  >
-                    <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-medium">
-                        {agent.agentName.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <span className="text-sm">{agent.agentName}</span>
+            <div className="space-y-1">
+              {linkedAgents.map((linkedAgent) => (
+                <div
+                  key={linkedAgent.id}
+                  className={cn(
+                    "flex items-center gap-2 p-2 rounded-lg transition-colors cursor-pointer text-sm",
+                    linkedAgentIds.has(linkedAgent.id) 
+                      ? "bg-primary/10 hover:bg-primary/15" 
+                      : "hover:bg-muted"
+                  )}
+                  onClick={() => {
+                    const newLinkedAgents = new Set(linkedAgentIds);
+                    if (newLinkedAgents.has(linkedAgent.id)) {
+                      newLinkedAgents.delete(linkedAgent.id);
+                    } else {
+                      newLinkedAgents.add(linkedAgent.id);
+                    }
+                    setLinkedAgentIds(newLinkedAgents);
+                    setHasUnsavedChanges(true);
+                  }}
+                >
+                  <div className="w-5 h-5 rounded-full bg-background flex items-center justify-center text-xs">
+                    {linkedAgent.agentName.charAt(0).toUpperCase()}
                   </div>
-                ))}
+                  <span className="flex-1">{linkedAgent.agentName}</span>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        </CardContent>
       </ScrollArea>
-
-      {/* Save Changes Button */}
-      <div className="p-4 border-t mt-auto">
+      <div className="p-4 border-t">
         <Button
           className="w-full"
           onClick={handleSaveChanges}
-          disabled={isUpdating || !hasUnsavedChanges}
+          disabled={!hasUnsavedChanges}
         >
-          {isUpdating ? "Saving..." : hasUnsavedChanges ? "Save Changes" : "No Changes"}
+          {hasUnsavedChanges ? "Save Changes" : "Saved"}
         </Button>
       </div>
     </Card>

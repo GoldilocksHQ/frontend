@@ -20,7 +20,7 @@ export interface UserActivationMappedConnector extends Connector {
 export interface Thread {
   id: UUID;
   messages: Message[];
-  taskChains: TaskList[];
+  taskLists: TaskList[];
   status: ThreadStatus;
   startTime: number;
   endTime?: number;
@@ -128,7 +128,6 @@ export interface AgentJSON {
   systemPrompt: string;
   selectedTools: string[];
   linkedAgentIds: UUID[];
-  messages: AgentMessage[];
   chainConfig?: ChainConfig;
 }
 

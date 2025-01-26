@@ -2,7 +2,6 @@ import { UUID } from "crypto";
 import { APIKeyManager } from "./api-key-manager";
 import { 
   AgentJSON, 
-  AgentMessage, 
   AgentErrorContext,
   ModelOption, 
   MessageType, 
@@ -14,8 +13,6 @@ import {
   ToolResult,
   Thread,
   TaskList,
-  TaskListStatus,
-  TaskStatus
 } from "./types";
 import { ConversationManager } from './conversation-manager';
 import { AgentError, ErrorTracker } from './error-tracker';
@@ -132,16 +129,18 @@ export class AgentManager {
     }
   }
 
+
+  // Agent Management
   private validateAgent(agent: Agent): void {
     if (!agent.agentName) throw new AgentError('Agent name is required');
     if (!agent.selectedModel) throw new AgentError('Agent model is required');
   }
 
-  createAgent(agent: Agent) {
+  addAgent(agent: Agent) {
     try {
       this.validateAgent(agent);
     this.agents.push(agent);
-      this.logger.info(`Agent created: ${agent.agentName}`);
+      this.logger.info(`Agent added: ${agent.agentName}`);
     } catch (error) {
       this.logger.error('Failed to create agent:', error);
       throw new AgentError('Failed to create agent', { error, agentName: agent.agentName } as AgentErrorContext);
@@ -162,7 +161,9 @@ export class AgentManager {
     return this.agents.find(agent => agent.id === agentId);
   }
 
-  async kickOffConversation(targetAgent: Agent, mode: string = "task", threadId?: UUID, sourceAgent?: Agent, judgementQuestion?: string, depth: number = 0): Promise<AgentMessage | AgentError> {
+
+  // Conversation Management
+  async kickOffConversation(targetAgent: Agent, mode: string, threadId: UUID, sourceAgent?: Agent, judgementQuestion?: string, depth: number = 0): Promise<Message | AgentError> {
     try {
       if (depth > 10) {
         this.logger.error('Maximum recursion depth reached in kickOffMessaging');
@@ -173,8 +174,9 @@ export class AgentManager {
         } as AgentErrorContext);
       }
 
-      // Check if there are any messages to process
-      if (!targetAgent.messages || targetAgent.messages.length === 0) {
+      // Get the agent's last message
+      const lastMessage = this.conversationManager.getLastMessage(targetAgent.id);
+      if (!lastMessage) {
         this.logger.error('No messages to process');
         return new AgentError('No messages to process', { 
           agentName: targetAgent.agentName,
@@ -183,27 +185,13 @@ export class AgentManager {
       }
 
       const chainConfig: ChainConfig = {
-        type: this.getChainType(mode),
+        type: this.chainFactory.getChainType(mode),
         model: targetAgent.selectedModel,
         memory: true,
         tools: Array.from(targetAgent.selectedTools)
       };
 
       const chain = this.chainFactory.createChain(chainConfig);
-
-      if (!threadId) {
-        threadId = this.conversationManager.createThread().id;
-      }
-      
-      // Get the last message content
-      const lastMessage = targetAgent.messages[targetAgent.messages.length - 1];
-      if (!lastMessage || !lastMessage.content) {
-        this.logger.error('Invalid message format');
-        return new AgentError('Invalid message format', { 
-          agentName: targetAgent.agentName,
-          mode 
-        } as AgentErrorContext);
-      }
 
       // Execute the chain based on mode
       switch (mode) {
@@ -212,7 +200,7 @@ export class AgentManager {
           const agentTaskList = result.agentTaskList as AgentTaskList;
           
           // Record the plan in conversation store
-          const message = this.conversationManager.addMessage({
+          const message = this.conversationManager.addMessageToThread({
             threadId,
             role: "assistant",
             content: JSON.stringify(agentTaskList),
@@ -222,53 +210,24 @@ export class AgentManager {
             timestamp: Date.now()
           } as Omit<Message, 'id'>);
 
-
           // Create task list
           const taskList = await this.createTaskList(targetAgent, threadId, agentTaskList);
           
           console.log(taskList);
+          // return this.conversationManager.translateMessageToAgentMessage(message);
           return message;
-
-          // Execute each task
-          // let taskOutputSummary: string = "";
-          // let lastStepOutput: string = `Goal: ${taskPlan.goal}\n\n`;
-          // for (const task of taskPlan.tasks) {
-          //   const result = await this.executeTask(agent, task, lastStepOutput);
-          //   lastStepOutput = result.result;
-          //   taskOutputSummary += `
-          //     Task ${task.description}
-          //     Output: ${result.result}
-          //   `;
-          // }
-
-          // Add the last step output to the conversation
-          // const messageId = this.conversationManager.addMessage({
-          //   threadId,
-          //   role: "assistant",
-          //   content: taskOutputSummary,
-          //   messageType: MessageType.AGENT_TO_USER,
-          //   sourceAgentId: agent.id,
-          //   timestamp: Date.now()
-          // } as Omit<Message, 'id'>);
-          // TODO: Need to send message to Agent for final output, but this workflow needs to go outside of this function
-
-          // return {
-          //   role: "assistant",
-          //   content: `Task execution completed. See message ${messageId} for details.`,
-          //   timestamp: Date.now()
-          // };
         }
 
         case "task_execution": {
           // Handle task execution
           const result = await chain.invoke({ 
             input: {
-              task: targetAgent.messages[targetAgent.messages.length - 1].content,
+              task: lastMessage.content,
             }
           });
           const toolResult = result.toolResult as ToolResult;
 
-          const message = this.conversationManager.addMessage({
+          const message = this.conversationManager.addMessageToThread({
             threadId,
             role: "assistant",
             content: JSON.stringify(toolResult),
@@ -278,25 +237,20 @@ export class AgentManager {
             timestamp: Date.now()
           } as Omit<Message, 'id'>);
 
+          // return this.conversationManager.translateMessageToAgentMessage(message);
           return message;
-
-          // return {
-          //   role: "assistant",
-          //   content: result.response,
-          //   timestamp: Date.now()
-          // };
         }
 
         case "conversation": {
           const result = await chain.invoke({ 
             input: {
-              content: targetAgent.messages[targetAgent.messages.length - 1].content,
+              content: lastMessage.content,
               messageType: targetAgent.id ? MessageType.AGENT_TO_USER : MessageType.USER_TO_AGENT,
             }
           });
           const conversationResponse = result.conversationResponse as string;
 
-          const message = this.conversationManager.addMessage({
+          const message = this.conversationManager.addMessageToThread({
             threadId,
             role: "assistant",
             content: conversationResponse,
@@ -306,6 +260,7 @@ export class AgentManager {
             timestamp: Date.now()
           } as Omit<Message, 'id'>);
 
+          // return this.conversationManager.translateMessageToAgentMessage(message);
           return message;
         }
 
@@ -315,12 +270,12 @@ export class AgentManager {
           const result = await chain.invoke({ 
             input: {
               requirement: judgementQuestion,
-              response: targetAgent.messages[targetAgent.messages.length - 1].content
+              response: lastMessage.content
             }
           });
 
           const judgementResponse = result.judgement as Message;
-          const message = this.conversationManager.addMessage({
+          const message = this.conversationManager.addMessageToThread({
             threadId,
             role: "assistant",
             content: JSON.stringify(judgementResponse),
@@ -328,8 +283,9 @@ export class AgentManager {
             targetAgentId: targetAgent.id,
             sourceAgentId: sourceAgent?.id,
             timestamp: Date.now()
-          } as Omit<Message, 'id'>);
+          } as Omit<Message, 'id'>);;
 
+          // return this.conversationManager.translateMessageToAgentMessage(message);
           return message;
         }
 
@@ -350,37 +306,23 @@ export class AgentManager {
     }
   }
 
+  // Task Management
   async createTaskList(agent: Agent, threadId: UUID, agentTaskList: AgentTaskList): Promise<TaskList> {
-    const taskList: TaskList = {
-      id: crypto.randomUUID() as UUID,
-      threadId: threadId,
-      sourceAgentId: agent.id,
-      tasks: [],
-      status: TaskListStatus.PENDING,
-      startTime: Date.now(),
-      executionFlow: [],
-      metadata: {
-        goal: agentTaskList.goal,
-        reasoning: agentTaskList.reasoning
-      }
-    };
+    const taskList = this.conversationManager.createTaskList(
+      threadId, 
+      agent.id, {
+      goal: agentTaskList.goal,
+      reasoning: agentTaskList.reasoning
+    });
 
     for (const agentTask of agentTaskList.tasks) {
-      const task: Task = {
-        id: crypto.randomUUID() as UUID,
-        listId: taskList.id,
+      this.conversationManager.addTask(
+        taskList.id, {
         step: agentTask.step,
         sourceAgentId: agent.id,
         targetAgentId: agentTask.requiredAgent,
         instruction: agentTask.instruction,
-        status: TaskStatus.PENDING,
-        startTime: Date.now(),
-        metadata: {
-          goal: agentTaskList.goal,
-          reasoning: agentTaskList.reasoning
-        },
-      }
-      taskList.tasks.push(task);
+      } as Omit<Task, 'id' | 'listId'>);
     }
 
     return taskList;
@@ -408,21 +350,6 @@ export class AgentManager {
     }
   }
 
-  private getChainType(mode: string): ChainType {
-    switch (mode) {
-      case "task_planning":
-        return ChainType.TASK_PLANNING;
-      case "task_execution":
-        return ChainType.TASK_EXECUTION;
-      case "conversation":
-        return ChainType.CONVERSATION;
-      case "judgement":
-        return ChainType.JUDGEMENT;
-      default:
-        throw new Error(`Unknown mode: ${mode}`);
-    }
-  }
-
   // Error management methods
   recordAgentError(agentId: UUID, error: string | Error | unknown, context?: string): void {
     this.errorTracker.recordError(agentId, error, context);
@@ -442,7 +369,7 @@ export class AgentManager {
   }
 
   public addMessageToThread(message: Omit<Message, 'id'>) {
-    return this.conversationManager.addMessage(message);
+    return this.conversationManager.addMessageToThread(message);
   }
 
   public clearThread(threadId: UUID) {
@@ -451,6 +378,18 @@ export class AgentManager {
 
   public getThread(threadId: UUID): Thread | null {
     return this.conversationManager.getThread(threadId);
+  }
+
+  public getMessage(messageId: string): Message | null {
+    return this.conversationManager.getMessage(messageId);
+  }
+
+  public getAllThreadsWithAgent(agentId: UUID): Thread[] {
+    return this.conversationManager.getAllThreadsWithAgent(agentId);
+  }
+
+  public getAllMessages(agentId: UUID): Message[] {
+    return this.conversationManager.getAllMessages(agentId);
   }
 }
 
@@ -462,7 +401,6 @@ export class Agent {
   public systemPrompt: string;
   public selectedTools: Set<string>;
   public linkedAgentIds: Set<UUID>;
-  public messages: AgentMessage[];
   public chainConfig?: ChainConfig;
 
   constructor(
@@ -483,7 +421,6 @@ export class Agent {
     this.selectedTools = selectedTools;
     this.linkedAgentIds = linkedAgentIds;
     this.chainConfig = chainConfig;
-    this.messages = [];
   }
 
   toJSON(): AgentJSON {
@@ -495,7 +432,6 @@ export class Agent {
       systemPrompt: this.systemPrompt,
       selectedTools: Array.from(this.selectedTools),
       linkedAgentIds: Array.from(this.linkedAgentIds),
-      messages: this.messages,
       chainConfig: this.chainConfig
     };
   }
@@ -511,7 +447,6 @@ export class Agent {
       new Set(json.linkedAgentIds),
       json.chainConfig
     );
-    agent.messages = json.messages;
     return agent;
   }
 
@@ -537,23 +472,5 @@ export class Agent {
 
   setSystemPrompt(systemPrompt: string) {
     this.systemPrompt = systemPrompt;
-  }
-
-  addMessage(message: AgentMessage) {
-    this.messages.push({
-      ...message,
-      timestamp: Date.now()
-    });
-  }
-
-  removeMessage(index: number) {
-    this.messages.splice(index, 1);
-  }
-
-  editMessage(index: number, message: AgentMessage) {
-    this.messages[index] = {
-      ...message,
-      timestamp: Date.now()
-    };
   }
 }

@@ -7,7 +7,8 @@ import {
   Execution,
   ThreadStatus,
   TaskStatus,
-  TaskListStatus
+  TaskListStatus,
+  AgentMessage
 } from "./types";
 
 export class ConversationManager {
@@ -30,7 +31,7 @@ export class ConversationManager {
     const thread: Thread = {
       id: threadId,
       messages: [],
-      taskChains: [],
+      taskLists: [],
       status: ThreadStatus.ACTIVE,
       startTime: Date.now(),
       metadata: {}
@@ -54,19 +55,27 @@ export class ConversationManager {
   }
 
   // Message Management
-  addMessage(message: Omit<Message, 'id'>, messageId?: UUID): Message {
-    const thread = this.threads.get(message.threadId);
+  addMessageToThread(messageData: Omit<Message, 'id'>): Message {
+    const message: Message = {
+      id: crypto.randomUUID() as UUID,
+      ...messageData
+    };
+    
+    const thread = this.threads.get(messageData.threadId);
     if (!thread) {
-      throw new Error(`Thread ${message.threadId} not found`);
+      throw new Error(`Thread ${messageData.threadId} not found`);
     }
 
-    const newMessage: Message = {
-      ...message,
-      id: messageId || crypto.randomUUID() as UUID,
-    };
+    thread.messages.push(message);
+    return message;
+  }
 
-    thread.messages.push(newMessage);
-    return newMessage;
+  getMessage(messageId: string): Message | null {
+    for (const thread of this.threads.values()) {
+      const message = thread.messages.find(msg => msg.id === messageId);
+      if (message) return message;
+    }
+    return null;
   }
 
   getThreadMessages(threadId: UUID): Message[] {
@@ -74,47 +83,47 @@ export class ConversationManager {
     return thread?.messages || [];
   }
 
-  // Task Chain Management
-  createTaskChain(threadId: UUID, sourceAgentId: UUID): UUID {
+  // Task List Management
+  createTaskList(threadId: UUID, sourceAgentId: UUID, metadata: Record<string, unknown>): TaskList {
     const thread = this.threads.get(threadId);
     if (!thread) {
       throw new Error(`Thread ${threadId} not found`);
     }
 
-    const taskChainId = crypto.randomUUID() as UUID;
-    const taskChain: TaskList = {
-      id: taskChainId,
+    const taskListId = crypto.randomUUID() as UUID;
+    const taskList: TaskList = {
+      id: taskListId,
       threadId,
       sourceAgentId,
       tasks: [],
       status: TaskListStatus.PENDING,
       startTime: Date.now(),
       executionFlow: [],
-      metadata: {}
+      metadata: metadata
     };
 
-    thread.taskChains.push(taskChain);
-    return taskChainId;
+    thread.taskLists.push(taskList);
+    return taskList;
   }
 
-  addTask(chainId: UUID, task: Omit<Task, 'id' | 'chainId'>): UUID {
-    const taskChain = this.findTaskChain(chainId);
-    if (!taskChain) {
-      throw new Error(`Task chain ${chainId} not found`);
+  addTask(listId: UUID, task: Omit<Task, 'id' | 'listId'>): Task {
+    const taskList = this.findTaskList(listId);
+    if (!taskList) {
+      throw new Error(`Task list ${listId} not found`);
     }
 
     const taskId = crypto.randomUUID() as UUID;
     const newTask: Task = {
       ...task,
       id: taskId,
-      listId: chainId,
+      listId: listId,
       status: TaskStatus.PENDING,
       startTime: Date.now(),
       metadata: {}
     };
 
-    taskChain.tasks.push(newTask);
-    return taskId;
+    taskList.tasks.push(newTask);
+    return newTask;
   }
 
   updateTaskStatus(taskId: UUID, status: TaskStatus, result?: string, error?: string): void {
@@ -144,21 +153,21 @@ export class ConversationManager {
       metadata: {}
     };
 
-    const taskChain = this.findTaskChain(task.listId);
-    if (taskChain) {
-      taskChain.executionFlow.push(newExecution);
+    const taskList = this.findTaskList(task.listId);
+    if (taskList) {
+      taskList.executionFlow.push(newExecution);
     }
 
     return executionId;
   }
 
   // Query Methods
-  getTaskChainMessages(chainId: UUID): Message[] {
-    const taskChain = this.findTaskChain(chainId);
-    if (!taskChain) return [];
+  getTaskListMessages(listId: UUID): Message[] {
+    const taskList = this.findTaskList(listId);
+    if (!taskList) return [];
 
-    return this.getThreadMessages(taskChain.threadId).filter(msg => 
-      taskChain.tasks.some(task => 
+    return this.getThreadMessages(taskList.threadId).filter(msg => 
+      taskList.tasks.some(task => 
         msg.taskId === task.id || 
         msg.sourceAgentId === task.sourceAgentId || 
         msg.targetAgentId === task.targetAgentId
@@ -170,32 +179,32 @@ export class ConversationManager {
     const task = this.findTask(taskId);
     if (!task) return [];
 
-    return this.getThreadMessages(this.findTaskChainThread(task.listId)?.id as UUID)
+    return this.getThreadMessages(this.findTaskListThread(task.listId)?.id as UUID)
       .filter(msg => msg.taskId === taskId);
   }
 
   // Helper Methods
-  private findTaskChain(chainId: UUID): TaskList | undefined {
+  private findTaskList(listId: UUID): TaskList | undefined {
     for (const thread of this.threads.values()) {
-      const chain = thread.taskChains.find(tc => tc.id === chainId);
-      if (chain) return chain;
+      const list = thread.taskLists.find(tc => tc.id === listId);
+      if (list) return list;
     }
     return undefined;
   }
 
   private findTask(taskId: UUID): Task | undefined {
     for (const thread of this.threads.values()) {
-      for (const chain of thread.taskChains) {
-        const task = chain.tasks.find(t => t.id === taskId);
+      for (const list of thread.taskLists) {
+        const task = list.tasks.find(t => t.id === taskId);
         if (task) return task;
       }
     }
     return undefined;
   }
 
-  private findTaskChainThread(chainId: UUID): Thread | undefined {
+  private findTaskListThread(listId: UUID): Thread | undefined {
     return Array.from(this.threads.values()).find(thread => 
-      thread.taskChains.some(tc => tc.id === chainId)
+      thread.taskLists.some(tc => tc.id === listId)
     );
   }
 
@@ -209,12 +218,43 @@ export class ConversationManager {
     if (!thread) {
       throw new Error(`Thread ${threadId} not found`);
     }
-
+    
     thread.messages = [];
-    thread.taskChains = [];
+    thread.taskLists = [];
   }
 
   deleteThread(threadId: UUID): void {
     this.threads.delete(threadId);
+  }
+
+  // Helper method to translate Message to AgentMessage
+  public translateMessageToAgentMessage(message: Message): AgentMessage {
+    return {
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp
+    };
+  }
+
+  public getAllThreadsWithAgent(agentId: UUID): Thread[] {
+    return Array.from(this.threads.values()).filter(thread => 
+      thread.messages.some(msg => msg.sourceAgentId === agentId || msg.targetAgentId === agentId)
+    );
+  }
+
+  // Get all messages for this agent
+  public getAllMessages(agentId: UUID): Message[] {
+    const involvedThreads = this.getAllThreadsWithAgent(agentId);
+    const historicMessages = involvedThreads.map(thread => 
+      thread.messages.filter(msg => msg.sourceAgentId === agentId || msg.targetAgentId === agentId)
+    ).flat();
+    return historicMessages;
+  } 
+
+  // Get the last message for this agent
+  public getLastMessage(agentId: UUID): Message | null {
+    const messages = this.getAllMessages(agentId);
+    messages.sort((a, b) => a.timestamp - b.timestamp);
+    return messages[messages.length - 1];
   }
 }

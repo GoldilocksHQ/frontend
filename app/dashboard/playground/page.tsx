@@ -11,7 +11,7 @@ import { ChatInterface } from "./components/chat-interface";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
 import { AgentError } from "@/lib/error-tracker";
-import { UserActivationMappedConnector, Thread, ChainType, MessageType } from "@/lib/types";
+import { UserActivationMappedConnector, Thread, MessageType, Message } from "@/lib/types";
 
 export default function PlaygroundPage() {
   const [agentManager, setAgentManager] = useState<AgentManager | null>(null);
@@ -20,6 +20,7 @@ export default function PlaygroundPage() {
   const [selectedModel, setSelectedModel] = useState(modelOptions[0]);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
+  const [historicMessages, setHistoricMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
@@ -28,46 +29,70 @@ export default function PlaygroundPage() {
   const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(new Set());
   const [linkedAgentIds, setLinkedAgentIds] = useState<Set<UUID>>(new Set());
   const [connectors, setConnectors] = useState<UserActivationMappedConnector[]>([]);
-  const [selectedChainType, setSelectedChainType] = useState<ChainType>(ChainType.CONVERSATION);
 
   const { toast } = useToast();
 
+
+  // Initialize Connectors and Agents Managers
   useEffect(() => {
-    initializeConnectorsAndAgents();
+    const initializeManagers = async () => {
+      try {
+        // First, initialize the Connector Manager
+        const connectorManagerInstance = await ConnectorManager.getInstance();
+        const fetchedConnectors = await connectorManagerInstance.getConnectors();
+        setConnectors(fetchedConnectors);
+
+        // Then, initialize the Agent Manager
+        const agentManagerInstance = await AgentManager.getInstance();
+        setAgentManager(agentManagerInstance);
+
+        // Load agents after both managers are initialized
+        loadAgents(agentManagerInstance);
+      } catch (error) {
+        console.error("Failed to initialize managers:", error);
+        toast({
+          title: "Error",
+          description: "Failed to initialize application managers",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeManagers();
   }, []);
   
-  const initializeConnectorsAndAgents = async () => {
-    try {
-      setLoading(true);
-      const connectorManager = await ConnectorManager.getInstance();
-      const fetchedConnectors = await connectorManager.getConnectors();
-      setConnectors(fetchedConnectors);
-      const agentManager = await AgentManager.getInstance();
-      setAgentManager(agentManager);
-      loadAgents(agentManager);
-      setAgents(agentManager.agents);
-    } catch (error) {
-      console.error("Failed to initialize agent manager:", error);
-      toast({
-        title: "Error",
-        description: "Failed to initialize agent manager",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
+  // Configure agent when selected
   useEffect(() => {
-    if (agentManager && selectedAgent) {
-      const agentErrors = agentManager.getAgentErrors(selectedAgent.id);
-      setErrors(agentErrors as AgentError[]);
-      setSelectedConnectors(selectedAgent.selectedTools);
-      setLinkedAgentIds(selectedAgent.linkedAgentIds);
-      
-      // Create a new thread when selecting an agent
-      const thread = agentManager.createThread();
-      setCurrentThread(thread);
+    if (!agentManager) return;
+    
+    if (selectedAgent) {
+      try {
+        const agentErrors = agentManager.getAgentErrors(selectedAgent.id);
+        setErrors(agentErrors as AgentError[]);
+        setSelectedConnectors(selectedAgent.selectedTools);
+        setLinkedAgentIds(selectedAgent.linkedAgentIds);
+        
+        // Create a new thread when selecting an agent
+        const thread = agentManager.createThread();
+        if (thread) {
+          setCurrentThread(thread);
+        }
+
+        // Load the agent's previous messages
+        const messages = agentManager.getAllMessages(selectedAgent.id);
+        setHistoricMessages(messages);
+        
+      } catch (error) {
+        console.error("Error setting up agent:", error);
+        toast({
+          title: "Error",
+          description: "Failed to set up agent",
+          variant: "destructive",
+        });
+      }
     } else {
       setErrors([]);
       setSelectedConnectors(new Set());
@@ -75,6 +100,53 @@ export default function PlaygroundPage() {
       setCurrentThread(null);
     }
   }, [agentManager, selectedAgent]);
+
+  // Load agents and threads from localStorage on mount
+  useEffect(() => {
+    const savedAgents = localStorage.getItem('agents');
+    if (savedAgents) {
+      localStorage.removeItem('agents'); // Clean up old format
+    }
+
+    if (agentManager) {
+      loadAgents(agentManager);
+    }
+
+    const savedThreads = localStorage.getItem('threads');
+    if (savedThreads) {
+      const parsedThreads = JSON.parse(savedThreads);
+      Object.entries(parsedThreads).forEach(([threadId, threadData]) => {
+        if (threadId && agentManager) {
+          const thread = agentManager.createThread();
+          if (thread) {
+            Object.assign(thread, threadData);
+            setCurrentThread(thread);
+          }
+        }
+      });
+    }
+  }, [agentManager]);
+
+  // Save agents to localStorage whenever they change
+  useEffect(() => {
+    if (agents.length > 0) {
+      // Save each agent individually instead of as a collection
+      agents.forEach(agent => {
+        localStorage.setItem(`agent-${agent.id}`, JSON.stringify(agent));
+      });
+      // Remove the collective agents storage
+      localStorage.removeItem('agents');
+    }
+  }, [agents]);
+
+  // Save threads to localStorage whenever they change
+  useEffect(() => {
+    if (currentThread) {
+      const threads = JSON.parse(localStorage.getItem('threads') || '{}');
+      threads[selectedAgent?.id || ''] = currentThread;
+      localStorage.setItem('threads', JSON.stringify(threads));
+    }
+  }, [currentThread, selectedAgent]);
 
   const handleAddAgent = async () => {
     if (!agentManager) {
@@ -96,7 +168,7 @@ export default function PlaygroundPage() {
         new Set<string>(),
         new Set<UUID>(),
       );
-      await agentManager.createAgent(newAgent);
+      await agentManager.addAgent(newAgent);
       saveAgent(newAgent);
       setAgents([...agentManager.agents]);
       toast({
@@ -116,7 +188,7 @@ export default function PlaygroundPage() {
   const handleDeleteAgent = (agent: Agent) => {
     if (!agentManager) return;
     agentManager.deleteAgent(agent);
-    localStorage.removeItem(`agent-${agent.agentName}`);
+    localStorage.removeItem(`agent-${agent.id}`); // Change from agent.agentName to agent.id
     setAgents(agents.filter((a) => a !== agent));
     if (selectedAgent === agent) {
       setSelectedAgent(null);
@@ -124,21 +196,23 @@ export default function PlaygroundPage() {
     }
   };
 
-  const handleSelectAgent = (agent: Agent) => {
+  const handleSelectAgent = async (agent: Agent) => {
+    if (!agentManager) return;
+    
     try {
       setSelectedAgent(agent);
       setSelectedModel(agent.selectedModel);
       setSystemPrompt(agent.systemPrompt);
       setSelectedConnectors(agent.selectedTools);
       setLinkedAgentIds(agent.linkedAgentIds);
-      if (agentManager) {
-        const agentErrors = agentManager.getAgentErrors(agent.id);
-        setErrors(agentErrors as AgentError[]);
-        
-        // Create a new thread when selecting an agent
-        const thread = agentManager.createThread();
-        setCurrentThread(thread);
-      }
+      setHistoricMessages(agentManager.getAllMessages(agent.id));
+      
+      const agentErrors = agentManager.getAgentErrors(agent.id);
+      setErrors(agentErrors as AgentError[]);
+      
+      // Create a new thread when selecting an agent
+      const thread = agentManager.createThread();
+      setCurrentThread(thread);
     } catch (error) {
       console.error("Error selecting agent:", error);
       toast({
@@ -180,57 +254,31 @@ export default function PlaygroundPage() {
     }
   };
 
-  const handleToggleConnector = (connector: UserActivationMappedConnector) => {
-    setSelectedConnectors((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(connector.name)) {
-        newSet.delete(connector.name);
-      } else {
-        newSet.add(connector.name);
-      }
-      return newSet;
-    });
-  };
-
-  const handleToggleLinkedAgent = (agentId: UUID) => {
-    setLinkedAgentIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(agentId)) {
-        newSet.delete(agentId);
-      } else {
-        newSet.add(agentId);
-      }
-      return newSet;
-    });
-  };
-
   const handleClearMessages = () => {
-    if (!selectedAgent || !currentThread || !agentManager) return;
+    if (!agentManager || !selectedAgent || !currentThread) return;
+    
     agentManager.clearThread(currentThread.id);
+    setCurrentThread(null);
+    
+    // Clear thread from localStorage
+    const threads = JSON.parse(localStorage.getItem('threads') || '{}');
+    delete threads[selectedAgent.id];
+    localStorage.setItem('threads', JSON.stringify(threads));
+    
+    // Create new thread
     const newThread = agentManager.createThread();
     setCurrentThread(newThread);
-    toast({
-      title: "Messages cleared",
-      description: "All messages have been cleared.",
-    });
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || !selectedAgent || !currentThread || !agentManager) {
-      toast({
-        title: "Cannot send message",
-        description: "Please ensure an agent is selected and message is not empty.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsWorking(true);
-    setWorkingStatus("Thinking...");
+  const handleSend = async (input: string) => {
+    if (!selectedAgent || !currentThread || !agentManager) return;
 
     try {
+      setIsWorking(true);
+      setWorkingStatus("Processing message...");
+
       // Add user message to thread
-      agentManager.addMessageToThread({
+      await agentManager.addMessageToThread({
         threadId: currentThread.id,
         role: "user",
         content: input,
@@ -240,40 +288,55 @@ export default function PlaygroundPage() {
         metadata: {}
       });
 
-      // Add message to agent's messages array
-      selectedAgent.addMessage({
-        role: "user",
-        content: input,
-        timestamp: Date.now()
-      });
+      // Get the chain type from agent's configuration or default to conversation
+      const chainType = selectedAgent.chainConfig?.type?.toLowerCase() || "conversation";
 
-      const response = await agentManager.kickOffConversation(
-        selectedAgent,
-        selectedChainType,
-        currentThread.id
-      );
+      // Execute conversation
+      const result = await agentManager.kickOffConversation(selectedAgent, chainType, currentThread.id);
 
-      if (response instanceof AgentError) {
-        toast({
-          title: "Error",
-          description: response.message,
-          variant: "destructive"
-        });
-        return;
+      if (result instanceof AgentError) {
+        console.error("Error:", result);
+        handleError(result.message, result.context ? JSON.stringify(result.context) : undefined);
+      } else {
+        // Add the agent's response to the thread
+        // const agentMessage = result;
+        // const agentMessage = await agentManager.addMessageToThread({
+        //   threadId: currentThread.id,
+        //   role: "assistant",
+        //   content: result.content,
+        //   messageType: MessageType.AGENT_TO_USER,
+        //   targetAgentId: selectedAgent.id,
+        //   timestamp: Date.now(),
+        //   metadata: {}
+        // });
+
+        // Add the agent's response to its messages
+        // selectedAgent.addMessageToAgent(agentMessage);
+
+        // Force update the thread state to trigger a re-render
+        const updatedThread = agentManager.getThread(currentThread.id);
+        if (updatedThread) {
+          setCurrentThread({ ...updatedThread });
+        }
+
+        // Force a re-render of the agents state
+        setAgents([...agents]);
       }
 
-      // Clear input
-      setInput("");
+      // Save updated thread to localStorage
+      const threads = JSON.parse(localStorage.getItem('threads') || '{}');
+      threads[currentThread.id] = currentThread;
+      localStorage.setItem('threads', JSON.stringify(threads));
+
     } catch (error) {
-      console.error('Error sending message:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive"
-      });
+      console.error("Error sending message:", error);
+      if (error instanceof Error) {
+        handleError(error.message);
+      }
     } finally {
       setIsWorking(false);
       setWorkingStatus("");
+      setInput("");
     }
   };
 
@@ -290,8 +353,12 @@ export default function PlaygroundPage() {
     }
   };
 
-  const loadAgents = (agentManager: AgentManager) => {
+  const loadAgents = (manager: AgentManager) => {
     try {
+      // Clear existing agents first
+      manager.agents = [];
+      
+      // Iterate through localStorage to find agent entries
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key?.startsWith('agent-')) {
@@ -299,7 +366,8 @@ export default function PlaygroundPage() {
           if (agentData) {
             try {
               const agentJSON = JSON.parse(agentData);
-              agentManager.createAgent(Agent.fromJSON(agentJSON));
+              const agent = Agent.fromJSON(agentJSON);
+              manager.addAgent(agent);
             } catch (parseError) {
               console.error('Error parsing agent data:', parseError);
               // Remove corrupted data
@@ -308,6 +376,9 @@ export default function PlaygroundPage() {
           }
         }
       }
+
+      // Update the agents state with the loaded agents
+      setAgents([...manager.agents]);
     } catch (error) {
       console.error('Error loading agents:', error);
       toast({
@@ -315,13 +386,6 @@ export default function PlaygroundPage() {
         description: "Failed to load saved agents",
         variant: "destructive"
       });
-    }
-  };
-
-  const handleModelChange = (value: string) => {
-    const model = modelOptions.find(model => model.name === value);
-    if (model) {
-      setSelectedModel(model);
     }
   };
 
@@ -378,26 +442,15 @@ export default function PlaygroundPage() {
             // Chat Interface
             <div className="flex gap-6 h-full max-h-full overflow-hidden">
               <AgentConfigSidebar
-                agents={agents}
-                selectedAgent={selectedAgent}
-                selectedModel={selectedModel}
-                handleModelChange={handleModelChange}
-                systemPrompt={systemPrompt}
-                setSystemPrompt={setSystemPrompt}
-                modelOptions={modelOptions}
-                handleUpdateAgent={handleUpdateAgent}
-                isUpdating={isWorking}
+                agent={selectedAgent}
                 connectors={connectors}
-                selectedConnectors={selectedConnectors}
-                handleToggleConnector={handleToggleConnector}
-                linkedAgentIds={linkedAgentIds}
-                handleToggleLinkedAgent={handleToggleLinkedAgent}
-                selectedChainType={selectedChainType}
-                setSelectedChainType={setSelectedChainType}
+                linkedAgents={agents.filter(a => a.id !== selectedAgent.id)}
+                onSave={handleUpdateAgent}
               />
               <ChatInterface
                 selectedAgent={selectedAgent}
                 currentThread={currentThread}
+                historicMessages={historicMessages}
                 input={input}
                 setInput={setInput}
                 isWorking={isWorking}

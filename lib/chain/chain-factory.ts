@@ -66,4 +66,19 @@ export class ChainFactory {
       apiKey: OPENAI_API_KEY
     });
   }
+
+  public getChainType(mode: string): ChainType {
+    switch (mode) {
+      case "task_planning":
+        return ChainType.TASK_PLANNING;
+      case "task_execution":
+        return ChainType.TASK_EXECUTION;
+      case "conversation":
+        return ChainType.CONVERSATION;
+      case "judgement":
+        return ChainType.JUDGEMENT;
+      default:
+        throw new Error(`Unknown mode: ${mode}`);
+    }
+  }
 } 
