@@ -2,61 +2,56 @@ import { BaseChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { BufferMemory } from "langchain/memory";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { Tool } from "@langchain/core/tools";
-import { ToolResult } from "../../types";
 import { z } from "zod";
+import { ConnectorTool } from "@/lib/tools/tool-registry";
 
-const TASK_EXECUTION_TEMPLATE = `You are a task execution assistant. Your role is to execute tasks using the available tools.
+const TASK_EXECUTION_TEMPLATE = `You are a task execution assistant. Your role is to analyze tasks and determine which connector and function to use to accomplish them.
 
-Given a task, you should:
-1. Analyze the task requirements and identify the necessary tools
-2. Plan the sequence of tool executions
-3. Execute each tool with appropriate inputs
-4. Handle errors and retry if necessary
-5. Summarize the results
+Given a task and available connectors with their functions, you should:
+1. Analyze the task requirements
+2. Choose the most appropriate connector and function, only from what is available
+3. Format the function parameters correctly according to the function's parameter schema
 
 Task to execute: {task}
 
-Available tools:
+Available connectors and their functions:
 {tools}
+
+Respond with a JSON object containing:
+1. The execution plan with connector name, function name, and parameters that match the parameter schema. All three are required.
+2. If no tools are required, provide your answer to the task directly
 `;
-// Respond with a JSON object in this format:
-// {{
-//   "success": true,
-//   "result": "Summary of what was accomplished",
-//   "error": "Error message if any"
-// }}`;
 
 const responseSchema = z.object({
-  success: z.boolean().describe("Whether the task was successfully completed"),
-  result: z.string().describe("The result of the task. This must be included in the response"),
-  error: z.string().optional().describe("An error message if the task failed")
+  response: z.string().describe("If no tools is required, provide your answer to the task here. If a tool is required, leave this empty."),
+  execution: z.object({
+    connectorName: z.string().describe("Name of the connector to use"),
+    functionName: z.string().describe("Name of the function to call"),
+    parameters: z.record(z.any()).describe("Parameters that match the function's parameter schema"),
+  }).describe("If a tool is required, provide the execution plan here. If no tool is required, leave all parameters empty.")
 });
-
 
 interface TaskExecutorInput {
   input: {
     task: string;
+    available_tools: Array<ConnectorTool>;
   }
 }
 
 interface TaskExecutorChainInput {
   model: ChatOpenAI;
   memory?: BufferMemory;
-  tools?: Tool[];
 }
 
 export class TaskExecutorChain extends BaseChain {
   private model: ChatOpenAI;
   public memory?: BufferMemory;
-  private tools: Tool[];
   private prompt: PromptTemplate;
 
   constructor(input: TaskExecutorChainInput) {
     super();
     this.model = input.model;
     this.memory = input.memory;
-    this.tools = input.tools || [];
     this.prompt = new PromptTemplate({
       template: TASK_EXECUTION_TEMPLATE,
       inputVariables: ["task", "tools"]
@@ -68,22 +63,23 @@ export class TaskExecutorChain extends BaseChain {
   }
 
   get inputKeys(): string[] {
-    return ["task", "tools"];
+    return ["task", "available_tools"];
   }
 
   get outputKeys(): string[] {
     return ["result"];
   }
 
-  async _call(values: TaskExecutorInput): Promise<{ toolResult: ToolResult }> {
+  async _call(values: TaskExecutorInput): Promise<{ result: { response: string; execution: { connectorName: string; functionName: string; parameters: Record<string, unknown>; } } }> {
     try {
       // Format tools for prompt
-      let toolDescriptions = "";
-      if (this.tools.length > 0) {
-        toolDescriptions = this.tools.map(tool => 
-          `- ${tool.name}: ${tool.description}`
-        ).join("\n");
-      }
+      const toolDescriptions = values.input.available_tools.map(tool => {
+        const functionDescriptions = tool.functions.map(func => 
+          `    - ${func.name}: ${func.description}\n      Parameters: ${JSON.stringify(func.parameters, null, 2)}`
+        ).join('\n');
+        
+        return `- ${tool.name}: ${tool.description}\n  Functions:\n${functionDescriptions}`;
+      }).join('\n\n');
 
       // Generate prompt
       const prompt = await this.prompt.format({
@@ -91,40 +87,16 @@ export class TaskExecutorChain extends BaseChain {
         tools: toolDescriptions
       });
 
-      const modeWithStructuredOutput = this.model.withStructuredOutput(responseSchema);
+      const modelWithStructuredOutput = this.model.withStructuredOutput(responseSchema);
 
       // Get completion from model
-      const response = await modeWithStructuredOutput.invoke([
+      const result = await modelWithStructuredOutput.invoke([
         { role: "system", content: prompt }
       ]);
 
-      // Parse response into ToolResult
-      const toolResult = response as ToolResult;
-
-      // Validate result
-      this.validateToolResult(toolResult);
-
-      if (!toolResult.success) {
-        throw new Error(`Task failed: ${toolResult.error}`);
-      }
-
-      return { toolResult };
+      return { result };
     } catch (error) {
       throw new Error(`Failed to execute task: ${error}`);
-    }
-  }
-
-  private validateToolResult(result: ToolResult): void {
-    if (typeof result.success !== "boolean") {
-      throw new Error("Tool result must include a boolean success flag");
-    }
-
-    if (!result.result || typeof result.result !== "string") {
-      throw new Error("Tool result must include a result string");
-    }
-
-    if (result.error && typeof result.error !== "string") {
-      throw new Error("Tool error must be a string if present");
     }
   }
 } 

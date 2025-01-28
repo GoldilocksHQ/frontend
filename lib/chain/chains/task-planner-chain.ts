@@ -142,10 +142,6 @@ export class TaskPlannerChain extends BaseChain {
         throw new Error("Each task must have a string requiredAgent");
       }
 
-      if (!Array.isArray(task.tools)) {
-        throw new Error("Each task must have a tools array");
-      }
-
       if (!Array.isArray(task.dependencies)) {
         throw new Error("Each task must have a dependencies array");
       }

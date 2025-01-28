@@ -58,8 +58,8 @@ export function AgentConfigSidebar({
     agent.editName(name);
     agent.editDescription(description);
     agent.selectModel(selectedModel);
-    agent.selectedTools = selectedTools;
-    agent.linkedAgentIds = linkedAgentIds;
+    agent.setTools(selectedTools);
+    agent.setLinkedAgentIds(linkedAgentIds);
     agent.chainConfig = {
       ...agent.chainConfig,
       type: selectedChainType,

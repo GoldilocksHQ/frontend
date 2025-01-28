@@ -1,29 +1,52 @@
 import { Tool } from "@langchain/core/tools";
 import { ConnectorManager } from "../connector-manager";
-import { UserActivationMappedConnector, ConnectorResponse } from "../types";
+import { UserActivationMappedConnector as Connector, ConnectorResponse, ToolDefinition, ToolFunction, UserActivationMappedConnector } from "../types";
 
-class ConnectorTool extends Tool {
+interface ToolInput {
+  functionName: string;
+  parameters?: Record<string, unknown>;
+}
+
+export class ConnectorTool extends Tool {
   name: string;
   description: string;
+  functions: Array<ToolFunction>;
   private connector: UserActivationMappedConnector;
 
-  constructor(connector: UserActivationMappedConnector) {
+  constructor(connector: UserActivationMappedConnector, toolDefinition: ToolDefinition) {
     super();
     this.name = connector.name;
-    this.description = connector.displayName;
+    this.description = connector.description;
     this.connector = connector;
+    this.functions = toolDefinition.functions;
   }
 
   /** @ignore */
-  async _call(input: string): Promise<string> {
+  async _call(input: string | ToolInput): Promise<string> {
+    // Parse the input to get function name and parameters
+    const { functionName, parameters = {} } = 
+      typeof input === 'string' ? JSON.parse(input) as ToolInput : input;
+
+    if (!functionName) {
+      throw new Error(`Function name not found in input`);
+    }
+
     try {
-      const response = await this.connector.execute(input);
+
+      // Find the function schema
+      const functionSchema = this.functions.find(f => f.name === functionName);
+      if (!functionSchema) {
+        throw new Error(`Function ${functionName} not found in ${this.name}`);
+      }
+
+      // Execute the function
+      const response = await this.connector.execute(functionName, JSON.stringify(parameters));
       return JSON.stringify(response);
     } catch (error) {
       const errorResponse: ConnectorResponse = {
         success: false,
         result: null,
-        error: `Failed to execute ${this.connector.name}: ${error}`,
+        error: `Failed to execute ${this.connector.name}_${functionName}: ${error}`,
         timestamp: Date.now()
       };
       return JSON.stringify(errorResponse);
@@ -34,16 +57,15 @@ class ConnectorTool extends Tool {
 export class ToolRegistry {
   private static instance: ToolRegistry | null = null;
   private connectorManager: ConnectorManager | null = null;
-  private tools: Map<string, Tool>;
+  private tools: Map<string, Tool> = new Map();
   private logger: Console = console;
 
-  private constructor() {
-    this.tools = new Map();
-  }
+  private constructor() {}
 
   static getInstance(): ToolRegistry {
     if (!ToolRegistry.instance) {
       ToolRegistry.instance = new ToolRegistry();
+      ToolRegistry.instance.initialize();
     }
     return ToolRegistry.instance;
   }
@@ -58,18 +80,26 @@ export class ToolRegistry {
     }
   }
 
+  public  getConnectors(): UserActivationMappedConnector[] {
+    return this.connectorManager?.getConnectors() ?? [];
+  }
+
   private async loadTools(): Promise<void> {
     try {
       // Get all connectors
-      const connectors = await this.connectorManager?.getConnectors();
+      const connectors = this.getConnectors();
+      
       if (!connectors) {
         this.logger.warn('No connectors available');
         return;
-      }
+      } 
+      
+      const toolDefinitions = await this.connectorManager?.loadToolDefinitions(connectors.map(c => c.name));
 
       // Create tools from connectors
       for (const connector of connectors) {
-        const tool = await this.createToolFromConnector(connector);
+        const toolDefinition = toolDefinitions?.find((td: ToolDefinition) => td.connectorName === connector.name);
+        const tool = await this.createToolFromConnector(connector, toolDefinition);
         if (tool) {
           this.tools.set(tool.name, tool);
         }
@@ -82,7 +112,7 @@ export class ToolRegistry {
     }
   }
 
-  private async createToolFromConnector(connector: UserActivationMappedConnector): Promise<Tool | null> {
+  private async createToolFromConnector(connector: Connector, toolDefinition: ToolDefinition): Promise<Tool | null> {
     try {
       // Check if connector is ready
       const isConnected = connector.isConnected;
@@ -92,17 +122,26 @@ export class ToolRegistry {
       }
 
       // Create tool
-      return new ConnectorTool(connector);
+      return new ConnectorTool(connector, toolDefinition);
     } catch (error) {
       this.logger.error(`Failed to create tool from connector ${connector.name}:`, error);
       return null;
     }
   }
 
-  getTool(name: string): Tool {
-    const tool = this.tools.get(name);
+  getTool(id: string): Tool {
+    const toolName = this.connectorManager?.getConnectors().find(c => c.id === id)?.name;
+    const tool = Array.from(this.tools.values()).find(t => t.name === toolName);
     if (!tool) {
-      throw new Error(`Tool ${name} not found`);
+      throw new Error(`Tool ${toolName} not found`);
+    }
+    return tool;
+  }
+
+  getToolByName(toolName: string): Tool {
+    const tool = Array.from(this.tools.values()).find(t => t.name === toolName);
+    if (!tool) {
+      throw new Error(`Tool ${toolName} not found`);
     }
     return tool;
   }

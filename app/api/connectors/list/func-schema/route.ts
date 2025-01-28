@@ -2,19 +2,17 @@ import { withApiAuth } from '@/app/api/middleware';
 import { NextRequest, NextResponse } from "next/server";
 import { ConnectorService } from "@/services/api/connector-service";
 
-export const GET = withApiAuth(async (req: NextRequest) => {
+export const POST = withApiAuth(async (req: NextRequest) => {
   try {
-    const searchParams = req.nextUrl.searchParams;
-    const userId = searchParams.get('user_id');
+    const body = await req.json();
+    const connectorNames = body.connector_names;
     const connectorService = new ConnectorService();
 
     // If userId is provided, return the user's connectors
-    const connectors = userId
-      ? await connectorService.getConnectors(userId)
-      : await connectorService.getConnectors();
-
+    const toolDefinitions = await connectorService.getToolDefinitions(connectorNames);
+    
     return NextResponse.json({
-      connectors: connectors
+      functionSchemas: toolDefinitions
     });
   } catch (error) {
     console.error('Error fetching connectors:', error);

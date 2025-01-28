@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { AgentManager, Agent, modelOptions } from "@/lib/agent-manager";
-import { ConnectorManager } from "@/lib/connector-manager";
 import { useToast } from "@/hooks/use-toast";
 import { UUID } from "crypto";
 import { AgentCard } from "./components/agent-card";
@@ -18,7 +17,7 @@ export default function PlaygroundPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [selectedModel, setSelectedModel] = useState(modelOptions[0]);
-  const [systemPrompt, setSystemPrompt] = useState("");
+  const [, setSystemPrompt] = useState("");
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
   const [historicMessages, setHistoricMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -26,8 +25,8 @@ export default function PlaygroundPage() {
   const [isWorking, setIsWorking] = useState(false);
   const [workingStatus, setWorkingStatus] = useState<string>("");
   const [errors, setErrors] = useState<AgentError[]>([]);
-  const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(new Set());
-  const [linkedAgentIds, setLinkedAgentIds] = useState<Set<UUID>>(new Set());
+  const [, setSelectedConnectors] = useState<Set<string>>(new Set());
+  const [, setLinkedAgentIds] = useState<Set<UUID>>(new Set());
   const [connectors, setConnectors] = useState<UserActivationMappedConnector[]>([]);
 
   const { toast } = useToast();
@@ -37,17 +36,16 @@ export default function PlaygroundPage() {
   useEffect(() => {
     const initializeManagers = async () => {
       try {
-        // First, initialize the Connector Manager
-        const connectorManagerInstance = await ConnectorManager.getInstance();
-        const fetchedConnectors = await connectorManagerInstance.getConnectors();
-        setConnectors(fetchedConnectors);
-
         // Then, initialize the Agent Manager
-        const agentManagerInstance = await AgentManager.getInstance();
-        setAgentManager(agentManagerInstance);
+        const manager = await AgentManager.getInstance();
+        setAgentManager(manager);
+
+        // First, initialize the Connector Manager
+        const connectors = await manager.getConnectors();
+        setConnectors(connectors);
 
         // Load agents after both managers are initialized
-        loadAgents(agentManagerInstance);
+        loadAgents(manager);
       } catch (error) {
         console.error("Failed to initialize managers:", error);
         toast({
@@ -84,7 +82,7 @@ export default function PlaygroundPage() {
         // Load the agent's previous messages
         const messages = agentManager.getAllMessages(selectedAgent.id);
         setHistoricMessages(messages);
-        
+
       } catch (error) {
         console.error("Error setting up agent:", error);
         toast({
@@ -119,7 +117,15 @@ export default function PlaygroundPage() {
         if (threadId && agentManager) {
           const thread = agentManager.createThread();
           if (thread) {
-            Object.assign(thread, threadData);
+            // Ensure message content is always a string
+            const safeThreadData = {
+              ...threadData as Thread,
+              messages: (threadData as Thread).messages?.map((msg: Message) => ({
+                ...msg,
+                content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content, null, 2)
+              })) || []
+            };
+            Object.assign(thread, safeThreadData);
             setCurrentThread(thread);
           }
         }
@@ -168,7 +174,7 @@ export default function PlaygroundPage() {
         new Set<string>(),
         new Set<UUID>(),
       );
-      await agentManager.addAgent(newAgent);
+      agentManager.addAgent(newAgent);
       saveAgent(newAgent);
       setAgents([...agentManager.agents]);
       toast({
@@ -234,10 +240,10 @@ export default function PlaygroundPage() {
     }
 
     try {
-      selectedAgent.selectModel(selectedModel);
-      selectedAgent.setSystemPrompt(systemPrompt);
-      selectedAgent.setTools(selectedConnectors);
-      selectedAgent.setLinkedAgentIds(linkedAgentIds);
+      // selectedAgent.selectModel(selectedModel);
+      // selectedAgent.setSystemPrompt(systemPrompt);
+      // selectedAgent.setTools(selectedConnectors);
+      // selectedAgent.setLinkedAgentIds(linkedAgentIds);
       setAgents([...agents]); // Trigger re-render
       saveAgent(selectedAgent);
       toast({
@@ -257,12 +263,20 @@ export default function PlaygroundPage() {
   const handleClearMessages = () => {
     if (!agentManager || !selectedAgent || !currentThread) return;
     
+    // get a list of unique threadIds
+    const threadIds = [...new Set(historicMessages.map(message => message.threadId as string))];
+
+    // Clear thread from agent manager
     agentManager.clearThread(currentThread.id);
     setCurrentThread(null);
+    setHistoricMessages([]);
     
     // Clear thread from localStorage
     const threads = JSON.parse(localStorage.getItem('threads') || '{}');
-    delete threads[selectedAgent.id];
+    for (const threadId of threadIds) {
+      agentManager.deleteThread(threadId as UUID);
+      delete threads[threadId];
+    }
     localStorage.setItem('threads', JSON.stringify(threads));
     
     // Create new thread
@@ -278,7 +292,7 @@ export default function PlaygroundPage() {
       setWorkingStatus("Processing message...");
 
       // Add user message to thread
-      await agentManager.addMessageToThread({
+      agentManager.addMessageToThread({
         threadId: currentThread.id,
         role: "user",
         content: input,
@@ -298,20 +312,6 @@ export default function PlaygroundPage() {
         console.error("Error:", result);
         handleError(result.message, result.context ? JSON.stringify(result.context) : undefined);
       } else {
-        // Add the agent's response to the thread
-        // const agentMessage = result;
-        // const agentMessage = await agentManager.addMessageToThread({
-        //   threadId: currentThread.id,
-        //   role: "assistant",
-        //   content: result.content,
-        //   messageType: MessageType.AGENT_TO_USER,
-        //   targetAgentId: selectedAgent.id,
-        //   timestamp: Date.now(),
-        //   metadata: {}
-        // });
-
-        // Add the agent's response to its messages
-        // selectedAgent.addMessageToAgent(agentMessage);
 
         // Force update the thread state to trigger a re-render
         const updatedThread = agentManager.getThread(currentThread.id);
@@ -319,7 +319,7 @@ export default function PlaygroundPage() {
           setCurrentThread({ ...updatedThread });
         }
 
-        // Force a re-render of the agents state
+        // Force a re-render of the agents statec
         setAgents([...agents]);
       }
 
@@ -404,7 +404,7 @@ export default function PlaygroundPage() {
     }
   };
 
-  if (loading) {
+  if (loading || !agentManager) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

@@ -13,7 +13,7 @@ export interface Connector {
 
 export interface UserActivationMappedConnector extends Connector {
   isConnected: boolean;
-  execute: (input: string) => Promise<ConnectorResponse>;
+  execute: (functionName: string, parameters: string) => Promise<unknown>;
 }
 
 // Thread and Message Types
@@ -178,10 +178,21 @@ export interface AgentTaskList {
 export interface AgentTask {
   step: number;
   instruction: string;
-  tools: string[];
   dependencies: number[];
   requiredAgent: UUID;
   reasoning: string;
+}
+
+export interface ToolDefinition {
+  connectorName: string;
+  functions: ToolFunction[];
+}
+
+export interface ToolFunction {
+  name: string;
+  description: string;
+  parameters: object;
+  responseSchema: object;
 }
 
 export interface ToolResult {

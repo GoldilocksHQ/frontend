@@ -41,7 +41,7 @@ export class ChainFactory {
           return new TaskPlannerChain({ model, memory, tools });
 
         case ChainType.TASK_EXECUTION:
-          return new TaskExecutorChain({ model, memory, tools });
+          return new TaskExecutorChain({ model, memory });
 
         case ChainType.CONVERSATION:
           return new ConversationChain({ model, memory });
@@ -63,7 +63,7 @@ export class ChainFactory {
       modelName: config.model.name,
       temperature: 0.7,
       maxTokens: 1000,
-      apiKey: OPENAI_API_KEY
+      apiKey: OPENAI_API_KEY,
     });
   }
 

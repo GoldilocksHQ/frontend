@@ -1,5 +1,4 @@
 import { UUID } from "crypto";
-import { APIKeyManager } from "./api-key-manager";
 import { 
   AgentJSON, 
   AgentErrorContext,
@@ -13,11 +12,13 @@ import {
   ToolResult,
   Thread,
   TaskList,
+  UserActivationMappedConnector,
 } from "./types";
 import { ConversationManager } from './conversation-manager';
 import { AgentError, ErrorTracker } from './error-tracker';
 import { ChainFactory } from './chain/chain-factory';
 import { ToolRegistry } from './tools/tool-registry';
+import { ConnectorTool } from './tools/tool-registry';
 import { Task } from "./types";
 
 // Constants
@@ -94,9 +95,43 @@ export const taskSchema = {
   },
 };
 
+export const toolExecutionSchema = {
+  type: "json_schema",
+  json_schema: {
+    name: "tool_execution_plan",
+    schema: {
+      type: "object",
+      properties: {
+        reasoning: {
+          type: "string",
+          description: "Explanation of why this tool and function were chosen"
+        },
+        toolExecution: {
+          type: "object",
+          properties: {
+            tool: {
+              type: "string",
+              description: "Name of the tool to use"
+            },
+            function: {
+              type: "string",
+              description: "Name of the function to call"
+            },
+            arguments: {
+              type: "object",
+              description: "Arguments to pass to the function"
+            }
+          },
+          required: ["tool", "function", "arguments"]
+        }
+      },
+      required: ["reasoning", "toolExecution"]
+    }
+  }
+};
+
 export class AgentManager {
   private static instance: AgentManager | null = null;
-  private apiKeyManager: APIKeyManager | null = null;
   private conversationManager: ConversationManager;
   private errorTracker: ErrorTracker;
   private chainFactory: ChainFactory;
@@ -121,7 +156,6 @@ export class AgentManager {
 
   private async initialize() {
     try {
-    this.apiKeyManager = await APIKeyManager.getInstance();
       await this.toolRegistry.initialize();
     } catch (error) {
       this.logger.error('Failed to initialize AgentManager:', error);
@@ -219,25 +253,68 @@ export class AgentManager {
         }
 
         case "task_execution": {
-          // Handle task execution
-          const result = await chain.invoke({ 
+          // First, let the agent analyze the task and choose the tool
+          const availableTools = Array.from(targetAgent.selectedTools).map((id) => {
+            const tool = this.toolRegistry.getTool(id);
+            return {
+              name: tool.name,
+              description: tool.description,
+              // Get functions from tool definition
+              functions: (tool as ConnectorTool).functions
+            };
+          })
+
+          const executionSuggestion = await chain.invoke({ 
             input: {
               task: lastMessage.content,
+              available_tools: availableTools
             }
           });
-          const toolResult = result.toolResult as ToolResult;
 
+          const result = executionSuggestion.result
+
+          // Extract tool execution plan from the result
+          let response: string;
+          if (result.execution) {
+            // Extract tool execution plan from the result
+            const { connectorName, functionName, parameters } = result.execution;
+
+            // Get the tool from registry
+            const tool = this.toolRegistry.getToolByName(connectorName);
+            
+            // Execute the tool with properly formatted input
+            const toolResult = await tool.call({
+              input: JSON.stringify({
+                functionName,
+                parameters
+              }, null, 2)
+            });
+
+            // Parse and format the result
+            response = typeof toolResult === 'string'
+              ? toolResult
+              : JSON.stringify(toolResult, null, 2);
+          } else {
+            response = typeof result.response === 'string'
+              ? result.response
+              : JSON.stringify(result.response, null, 2);
+          }
+
+          // Add the result to the thread
           const message = this.conversationManager.addMessageToThread({
             threadId,
             role: "assistant",
-            content: JSON.stringify(toolResult),
+            content: response,
             messageType: MessageType.TASK_EXECUTION,
             targetAgentId: targetAgent.id,
             sourceAgentId: sourceAgent?.id,
-            timestamp: Date.now()
-          } as Omit<Message, 'id'>);
+            timestamp: Date.now(),
+            metadata: {}
+          });
 
-          // return this.conversationManager.translateMessageToAgentMessage(message);
+          // Add message to agent's message list
+          targetAgent.addMessage(message);
+
           return message;
         }
 
@@ -335,7 +412,7 @@ export class AgentManager {
         type: ChainType.TASK_EXECUTION,
         model: agent.selectedModel,
         memory: true,
-        tools: task.tools
+        tools: Array.from(agent.selectedTools)
       });
 
       const lastStepResult = lastStepOutput ? `\n\nLast step result: ${lastStepOutput}` : '';
@@ -376,6 +453,10 @@ export class AgentManager {
     return this.conversationManager.clearThread(threadId);
   }
 
+  public deleteThread(threadId: UUID) {
+    return this.conversationManager.deleteThread(threadId);
+  }
+
   public getThread(threadId: UUID): Thread | null {
     return this.conversationManager.getThread(threadId);
   }
@@ -391,6 +472,10 @@ export class AgentManager {
   public getAllMessages(agentId: UUID): Message[] {
     return this.conversationManager.getAllMessages(agentId);
   }
+
+  public getConnectors(): UserActivationMappedConnector[] {
+    return this.toolRegistry.getConnectors();
+  }
 }
 
 export class Agent {
@@ -402,6 +487,7 @@ export class Agent {
   public selectedTools: Set<string>;
   public linkedAgentIds: Set<UUID>;
   public chainConfig?: ChainConfig;
+  public messages: Message[] = [];
 
   constructor(
     id: UUID,
@@ -427,7 +513,7 @@ export class Agent {
     return {
       id: this.id,
       agentName: this.agentName,
-      agentDescription: this.agentDescription,
+      agentDescription: typeof this.agentDescription === 'string' ? this.agentDescription : String(this.agentDescription),
       selectedModel: this.selectedModel,
       systemPrompt: this.systemPrompt,
       selectedTools: Array.from(this.selectedTools),
@@ -437,10 +523,15 @@ export class Agent {
   }
 
   static fromJSON(json: AgentJSON): Agent {
+    // Ensure description is a string
+    const description = typeof json.agentDescription === 'string' 
+      ? json.agentDescription 
+      : String(json.agentDescription);
+
     const agent = new Agent(
       json.id,
       json.agentName,
-      json.agentDescription,
+      description,
       json.selectedModel,
       json.systemPrompt,
       new Set(json.selectedTools),
@@ -472,5 +563,9 @@ export class Agent {
 
   setSystemPrompt(systemPrompt: string) {
     this.systemPrompt = systemPrompt;
+  }
+
+  addMessage(message: Message) {
+    this.messages.push(message);
   }
 }

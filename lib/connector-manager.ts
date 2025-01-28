@@ -5,7 +5,6 @@ import { APIKeyManager } from "./api-key-manager";
 export class ConnectorManager {
   private static instance: ConnectorManager;
   private connectors: UserActivationMappedConnector[] = [];
-  private functionSchemas: Map<string, object> = new Map();
   private ready: Promise<void>;
   private userId: string | undefined;
   private apiKeyManager: APIKeyManager | undefined;
@@ -19,6 +18,7 @@ export class ConnectorManager {
     if (!ConnectorManager.instance) {
       ConnectorManager.instance = new ConnectorManager();
     }
+    await ConnectorManager.instance.ready;
     return ConnectorManager.instance;
   }
 
@@ -33,8 +33,7 @@ export class ConnectorManager {
   }
 
   // Getters for connectors
-  async getConnectors(): Promise<UserActivationMappedConnector[]> {
-    await this.ready;
+  getConnectors(): UserActivationMappedConnector[] {
     return this.connectors;
   }
 
@@ -56,7 +55,19 @@ export class ConnectorManager {
       headers: this.headers,
     });
     const data = await response.json();
+
     return data.connectors;
+  }
+
+  async loadToolDefinitions(connectorNames: string[]) {
+    const baseUrl = '/api/connectors/list/func-schema';
+    const response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ connector_names: connectorNames }),
+    });
+    const data = await response.json();
+    return data.functionSchemas;
   }
 
   private mapUserActivationMappedConnectors(
@@ -68,10 +79,10 @@ export class ConnectorManager {
     return allConnectors.map(connector => ({
       ...connector,
       isConnected: activatedIds.has(connector.id),
-      execute: async (input: string) => {
-        return await this.executeConnectorFunction(connector, { name: input, args: {} });
+      execute: async (functionName: string, parameters: string) => {
+        return await this.executeConnectorFunction(connector, { name: functionName, parameters: parameters });
       },
-    }));
+    })) ;
   }
 
   async connectConnector(connector: UserActivationMappedConnector) {
@@ -90,25 +101,7 @@ export class ConnectorManager {
     return data;
   }
 
-  async getFunctionSchema(connector?: Connector, func?: string) {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    let url = `${baseUrl}/api/connectors/list/schema?user_id=${this.userId}`
-    if (connector) {
-      url += `&connector_name=${connector.name}`;
-    }
-    if (func) {
-      url += `&function_name=${func}`;
-    }
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.headers,
-    });
-    const data = await response.json();
-    return data;
-  }
-
-  async executeConnectorFunction(connector: Connector, func: { name: string, args: Record<string, unknown> }) {
+  async executeConnectorFunction(connector: Connector, func: { name: string, parameters: string }) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     
     // Add timeout and better error handling for fetch
@@ -122,7 +115,8 @@ export class ConnectorManager {
         body: JSON.stringify({
           connector: connector.name,
           function: func.name,
-          arguments: func.args,
+           // Explicitly ensure parameters is an object
+          arguments: func.parameters || {}, 
           userId: this.userId
         }),
         signal: controller.signal,
@@ -130,15 +124,6 @@ export class ConnectorManager {
         cache: 'no-store',
         keepalive: true
       });
-
-      // if (!response.ok) {
-      //   const errorText = await response.text().catch(() => 'Failed to read error response');
-      //   throw new APIError(
-      //     `Function execution failed: ${errorText}`,
-      //     response.status,
-      //     { connectorName, functionName, status: response.status }
-      //   );
-      // }
 
       const data = await response.json().catch(() => ({ error: 'Failed to parse response JSON' }));
       if (data.error) {

@@ -4,6 +4,8 @@ import { handleFunction as handleGoogleSheetsFunction } from "@/connectors/googl
 import { handleFunction as handleGoogleDriveFunction } from "@/connectors/google-drive/connector";
 import { handleFunction as handleGoogleDocsFunction } from "@/connectors/google-docs/connector";
 import { UUID } from "crypto";
+import { googleDriveToolDefinition, googleDocsToolDefinition, googleSheetsToolDefinition } from "@/connectors/function-schema";
+import { ToolDefinition, APIError } from "./agent-service";
 
 export interface ConnectorFunction {
   connector: string;
@@ -12,48 +14,56 @@ export interface ConnectorFunction {
 }
 
 export class ConnectorService {
-  async getAllConnectors(): Promise<Connector[]> {
+  async getConnectors(userId?: string): Promise<Connector[]> {
     const { success, data, error } = await queryDatabase(
-      "api",
-      "connectors",
-      "id, connector_name, connector_display_name"
+      "api",      
+      userId ? "activated_connectors" : "connectors",
+      userId ? "connector_id , connectors ( id, connector_name, connector_display_name, connector_description )" : "id, connector_name, connector_display_name, connector_description",
+      userId ? { user_id: userId } : {},
     );
 
     if (!success || !data) {
       throw new Error(error || "Failed to fetch connectors");
     }
 
-    const connectors = Array.isArray(data) ? data.map((connector: Record<string, string>) => ({
-      id: connector.id,
-      name: connector.connector_name,
-      displayName: connector.connector_display_name,
-      description: connector.connector_description
+    const connectors = Array.isArray(data) ? data.map((connector: Record<string, unknown>) => ({
+      id: userId ? connector.connector_id : connector.id,
+      name: userId ? (connector.connectors as Record<string, unknown>).connector_name : connector.connector_name,
+      displayName: userId ? (connector.connectors as Record<string, unknown>).connector_display_name : connector.connector_display_name,
+      description: userId ? (connector.connectors as Record<string, unknown>).connector_description : connector.connector_description
     })) : [];
     
-    return connectors;
+    return connectors as Connector[];
   }
 
-  async getUserConnectors(userId: string): Promise<Connector[]> {
-    const { success, data, error } = await queryDatabase(
-      "api",
-      "activated_connectors",
-      "connectors ( id, connector_name, connector_display_name)",
-      { user_id: userId }
-    );
-
-    if (!success || !data) {
-      throw new Error(error || "Failed to fetch user connectors");
+  async getToolDefinitions(connectorNames: string[]): Promise<ToolDefinition[]> {
+    try {
+      return connectorNames.map(connectorName => {
+        switch (connectorName) {
+          case 'google-sheets':
+            return googleSheetsToolDefinition;
+          case 'google-drive':
+            return googleDriveToolDefinition;
+          case 'google-docs':
+            return googleDocsToolDefinition;
+          default:
+            throw new APIError(
+              `Unknown connector: ${connectorName}`,
+              400,
+              { availableConnectors: ['google-sheets', 'google-drive', 'google-docs'] }
+            );
+        }
+      });
+    } catch (error) {
+      if (error instanceof APIError) throw error;
+      throw new APIError(
+        'Failed to get tool definitions',
+        500,
+        { error, connectorNames }
+      );
     }
-
-    const connectors = Array.isArray(data) ? data.map((connectors: Record<string, string>) => ({
-      id: connectors.id,
-      name: connectors.connector_name,
-      displayName: connectors.connector_display_name,
-      description: connectors.connector_description
-    })) : [];
-    
-    return connectors;
   }
+
 
   async executeFunction(userId: UUID, func: ConnectorFunction) {
     switch (func.connector) {

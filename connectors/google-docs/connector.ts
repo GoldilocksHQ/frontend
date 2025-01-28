@@ -31,6 +31,13 @@ export async function handleFunction(
       return { success: false, result: null, error: credentials.error || "No valid credentials" };
     }
 
+    // Ensure args is a valid JSON string before parsing
+    if (typeof args === 'string') {
+      args = JSON.parse(args);
+    } else {
+      return { success: false, result: null, error: 'Invalid arguments format' };
+    }
+
     switch (functionName) {
       case 'readDocument': {
         if (!args.documentId) {
