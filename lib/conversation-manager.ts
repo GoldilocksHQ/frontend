@@ -61,7 +61,7 @@ export class ConversationManager {
       ...messageData
     };
     
-    const thread = this.threads.get(messageData.threadId);
+    const thread = this.threads.get(messageData.threadId as UUID);
     if (!thread) {
       throw new Error(`Thread ${messageData.threadId} not found`);
     }
@@ -153,7 +153,7 @@ export class ConversationManager {
       metadata: {}
     };
 
-    const taskList = this.findTaskList(task.listId);
+    const taskList = this.findTaskList(task.listId as UUID);
     if (taskList) {
       taskList.executionFlow.push(newExecution);
     }
@@ -166,7 +166,7 @@ export class ConversationManager {
     const taskList = this.findTaskList(listId);
     if (!taskList) return [];
 
-    return this.getThreadMessages(taskList.threadId).filter(msg => 
+    return this.getThreadMessages(taskList.threadId as UUID).filter(msg => 
       taskList.tasks.some(task => 
         msg.taskId === task.id || 
         msg.sourceAgentId === task.sourceAgentId || 
@@ -179,7 +179,7 @@ export class ConversationManager {
     const task = this.findTask(taskId);
     if (!task) return [];
 
-    return this.getThreadMessages(this.findTaskListThread(task.listId)?.id as UUID)
+    return this.getThreadMessages(this.findTaskListThread(task.listId as UUID)?.id as UUID)
       .filter(msg => msg.taskId === taskId);
   }
 

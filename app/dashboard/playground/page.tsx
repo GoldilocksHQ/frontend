@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AgentManager, Agent, modelOptions } from "@/lib/agent-manager";
+import { AgentManager, Agent } from "@/lib/agent-manager";
 import { useToast } from "@/hooks/use-toast";
 import { UUID } from "crypto";
 import { AgentCard } from "./components/agent-card";
@@ -9,43 +9,57 @@ import { AgentConfigSidebar } from "./components/agent-config-sidebar";
 import { ChatInterface } from "./components/chat-interface";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
-import { AgentError } from "@/lib/error-tracker";
-import { UserActivationMappedConnector, Thread, MessageType, Message } from "@/lib/types";
+import { UserActivationMappedConnector, MessageType } from "@/lib/types";
+import { useStores } from "@/lib/stores";
+import { LoadingState, LoadingWrapper } from "@/app/components/common/loading-state";
+import { AgentError } from "@/lib/agent-manager";
 
 export default function PlaygroundPage() {
+  const { ui, agent, thread } = useStores();
   const [agentManager, setAgentManager] = useState<AgentManager | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [selectedModel, setSelectedModel] = useState(modelOptions[0]);
-  const [, setSystemPrompt] = useState("");
-  const [currentThread, setCurrentThread] = useState<Thread | null>(null);
-  const [historicMessages, setHistoricMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [isWorking, setIsWorking] = useState(false);
-  const [workingStatus, setWorkingStatus] = useState<string>("");
-  const [errors, setErrors] = useState<AgentError[]>([]);
-  const [, setSelectedConnectors] = useState<Set<string>>(new Set());
-  const [, setLinkedAgentIds] = useState<Set<UUID>>(new Set());
   const [connectors, setConnectors] = useState<UserActivationMappedConnector[]>([]);
+  const [input, setInput] = useState("");
 
   const { toast } = useToast();
-
 
   // Initialize Connectors and Agents Managers
   useEffect(() => {
     const initializeManagers = async () => {
       try {
-        // Then, initialize the Agent Manager
+        ui.setLoading(true);
+        
+        // Initialize the Agent Manager
         const manager = await AgentManager.getInstance();
         setAgentManager(manager);
 
-        // First, initialize the Connector Manager
-        const connectors = await manager.getConnectors();
-        setConnectors(connectors);
+        // Initialize the Connector Manager and load connectors
+        const loadedConnectors = await manager.getConnectors();
+        setConnectors(loadedConnectors);
 
-        // Load agents after both managers are initialized
-        loadAgents(manager);
+        // Create a new thread if none exists
+        if (!thread.currentThread) {
+          const newThread = manager.createThread();
+          thread.setCurrentThread(newThread);
+        }
+
+        // Add existing agents to the manager
+        agent.agents.forEach(savedAgent => {
+          try {
+            manager.addAgent(savedAgent);
+          } catch (error) {
+            console.error(`Error adding agent to manager:`, error);
+            if (error instanceof AgentError) {
+              console.warn(`Invalid agent data:`, error.message);
+              // Remove invalid agent from store
+              agent.removeAgent(savedAgent.id);
+            }
+            toast({
+              title: "Warning",
+              description: `Failed to load agent: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              variant: "destructive",
+            });
+          }
+        });
       } catch (error) {
         console.error("Failed to initialize managers:", error);
         toast({
@@ -54,105 +68,12 @@ export default function PlaygroundPage() {
           variant: "destructive",
         });
       } finally {
-        setLoading(false);
+        ui.setLoading(false);
       }
     };
 
     initializeManagers();
   }, []);
-  
-
-  // Configure agent when selected
-  useEffect(() => {
-    if (!agentManager) return;
-    
-    if (selectedAgent) {
-      try {
-        const agentErrors = agentManager.getAgentErrors(selectedAgent.id);
-        setErrors(agentErrors as AgentError[]);
-        setSelectedConnectors(selectedAgent.selectedTools);
-        setLinkedAgentIds(selectedAgent.linkedAgentIds);
-        
-        // Create a new thread when selecting an agent
-        const thread = agentManager.createThread();
-        if (thread) {
-          setCurrentThread(thread);
-        }
-
-        // Load the agent's previous messages
-        const messages = agentManager.getAllMessages(selectedAgent.id);
-        setHistoricMessages(messages);
-
-      } catch (error) {
-        console.error("Error setting up agent:", error);
-        toast({
-          title: "Error",
-          description: "Failed to set up agent",
-          variant: "destructive",
-        });
-      }
-    } else {
-      setErrors([]);
-      setSelectedConnectors(new Set());
-      setLinkedAgentIds(new Set());
-      setCurrentThread(null);
-    }
-  }, [agentManager, selectedAgent]);
-
-  // Load agents and threads from localStorage on mount
-  useEffect(() => {
-    const savedAgents = localStorage.getItem('agents');
-    if (savedAgents) {
-      localStorage.removeItem('agents'); // Clean up old format
-    }
-
-    if (agentManager) {
-      loadAgents(agentManager);
-    }
-
-    const savedThreads = localStorage.getItem('threads');
-    if (savedThreads) {
-      const parsedThreads = JSON.parse(savedThreads);
-      Object.entries(parsedThreads).forEach(([threadId, threadData]) => {
-        if (threadId && agentManager) {
-          const thread = agentManager.createThread();
-          if (thread) {
-            // Ensure message content is always a string
-            const safeThreadData = {
-              ...threadData as Thread,
-              messages: (threadData as Thread).messages?.map((msg: Message) => ({
-                ...msg,
-                content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content, null, 2)
-              })) || []
-            };
-            Object.assign(thread, safeThreadData);
-            setCurrentThread(thread);
-          }
-        }
-      });
-    }
-  }, [agentManager]);
-
-  // Save agents to localStorage whenever they change
-  useEffect(() => {
-    if (agents.length > 0) {
-      // Save each agent individually instead of as a collection
-      agents.forEach(agent => {
-        localStorage.setItem(`agent-${agent.id}`, JSON.stringify(agent));
-      });
-      // Remove the collective agents storage
-      localStorage.removeItem('agents');
-    }
-  }, [agents]);
-
-  // Save threads to localStorage whenever they change
-  useEffect(() => {
-    if (currentThread) {
-      const threads = JSON.parse(localStorage.getItem('threads') || '{}');
-      threads[selectedAgent?.id || ''] = currentThread;
-      localStorage.setItem('threads', JSON.stringify(threads));
-    }
-  }, [currentThread, selectedAgent]);
 
   const handleAddAgent = async () => {
     if (!agentManager) {
@@ -167,16 +88,17 @@ export default function PlaygroundPage() {
     try {
       const newAgent = new Agent(
         crypto.randomUUID() as UUID,
-        `Agent ${agents.length + 1}`,
+        `Agent ${agent.agents.length + 1}`,
         "New Agent Description",
-        selectedModel,
+        agent.selectedModel,
         "Default system prompt",
         new Set<string>(),
         new Set<UUID>(),
       );
+      
       agentManager.addAgent(newAgent);
-      saveAgent(newAgent);
-      setAgents([...agentManager.agents]);
+      agent.addAgent(newAgent);
+      
       toast({
         title: "Success",
         description: "New agent created successfully.",
@@ -191,282 +113,158 @@ export default function PlaygroundPage() {
     }
   };
 
-  const handleDeleteAgent = (agent: Agent) => {
-    if (!agentManager) return;
-    agentManager.deleteAgent(agent);
-    localStorage.removeItem(`agent-${agent.id}`); // Change from agent.agentName to agent.id
-    setAgents(agents.filter((a) => a !== agent));
-    if (selectedAgent === agent) {
-      setSelectedAgent(null);
-      setCurrentThread(null);
-    }
-  };
-
-  const handleSelectAgent = async (agent: Agent) => {
-    if (!agentManager) return;
-    
-    try {
-      setSelectedAgent(agent);
-      setSelectedModel(agent.selectedModel);
-      setSystemPrompt(agent.systemPrompt);
-      setSelectedConnectors(agent.selectedTools);
-      setLinkedAgentIds(agent.linkedAgentIds);
-      setHistoricMessages(agentManager.getAllMessages(agent.id));
-      
-      const agentErrors = agentManager.getAgentErrors(agent.id);
-      setErrors(agentErrors as AgentError[]);
-      
-      // Create a new thread when selecting an agent
-      const thread = agentManager.createThread();
-      setCurrentThread(thread);
-    } catch (error) {
-      console.error("Error selecting agent:", error);
+  const handleSend = async (message: string) => {
+    if (!agent.selectedAgent || !thread.currentThread || !agentManager) {
       toast({
         title: "Error",
-        description: "Failed to load agent configuration",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleUpdateAgent = () => {
-    if (!selectedAgent) {
-      toast({
-        title: "Error",
-        description: "No agent selected",
+        description: "Please select an agent first",
         variant: "destructive"
       });
       return;
     }
 
     try {
-      // selectedAgent.selectModel(selectedModel);
-      // selectedAgent.setSystemPrompt(systemPrompt);
-      // selectedAgent.setTools(selectedConnectors);
-      // selectedAgent.setLinkedAgentIds(linkedAgentIds);
-      setAgents([...agents]); // Trigger re-render
-      saveAgent(selectedAgent);
-      toast({
-        title: "Success",
-        description: "Agent settings have been updated successfully.",
-      });
-    } catch (error) {
-      console.error('Error updating agent:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update agent settings",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleClearMessages = () => {
-    if (!agentManager || !selectedAgent || !currentThread) return;
-    
-    // get a list of unique threadIds
-    const threadIds = [...new Set(historicMessages.map(message => message.threadId as string))];
-
-    // Clear thread from agent manager
-    agentManager.clearThread(currentThread.id);
-    setCurrentThread(null);
-    setHistoricMessages([]);
-    
-    // Clear thread from localStorage
-    const threads = JSON.parse(localStorage.getItem('threads') || '{}');
-    for (const threadId of threadIds) {
-      agentManager.deleteThread(threadId as UUID);
-      delete threads[threadId];
-    }
-    localStorage.setItem('threads', JSON.stringify(threads));
-    
-    // Create new thread
-    const newThread = agentManager.createThread();
-    setCurrentThread(newThread);
-  };
-
-  const handleSend = async (input: string) => {
-    if (!selectedAgent || !currentThread || !agentManager) return;
-
-    try {
-      setIsWorking(true);
-      setWorkingStatus("Processing message...");
+      ui.setWorking(true);
+      ui.setWorkingStatus("Processing message...");
 
       // Add user message to thread
-      agentManager.addMessageToThread({
-        threadId: currentThread.id,
+      const userMessage = agentManager.addMessageToThread({
+        threadId: thread.currentThread.id,
         role: "user",
-        content: input,
+        content: message,
         messageType: MessageType.USER_TO_AGENT,
-        targetAgentId: selectedAgent.id,
+        targetAgentId: agent.selectedAgent.id,
         timestamp: Date.now(),
         metadata: {}
       });
+      
+      // Update UI with user message
+      thread.addMessage(userMessage);
 
       // Get the chain type from agent's configuration or default to conversation
-      const chainType = selectedAgent.chainConfig?.type?.toLowerCase() || "conversation";
+      const chainType = agent.selectedAgent.chainConfig?.type?.toLowerCase() || "conversation";
 
       // Execute conversation
-      const result = await agentManager.kickOffConversation(selectedAgent, chainType, currentThread.id);
+      const result = await agentManager.kickOffConversation(
+        agent.selectedAgent, 
+        chainType, 
+        thread.currentThread.id as UUID
+      );
 
-      if (result instanceof AgentError) {
+      if (result instanceof Error) {
         console.error("Error:", result);
-        handleError(result.message, result.context ? JSON.stringify(result.context) : undefined);
+        handleError(result.message);
       } else {
-
-        // Force update the thread state to trigger a re-render
-        const updatedThread = agentManager.getThread(currentThread.id);
-        if (updatedThread) {
-          setCurrentThread({ ...updatedThread });
-        }
-
-        // Force a re-render of the agents statec
-        setAgents([...agents]);
+        // Add agent's response to the thread store
+        thread.addMessage(result);
       }
 
-      // Save updated thread to localStorage
-      const threads = JSON.parse(localStorage.getItem('threads') || '{}');
-      threads[currentThread.id] = currentThread;
-      localStorage.setItem('threads', JSON.stringify(threads));
-
+      setInput("");
     } catch (error) {
       console.error("Error sending message:", error);
       if (error instanceof Error) {
         handleError(error.message);
       }
     } finally {
-      setIsWorking(false);
-      setWorkingStatus("");
-      setInput("");
-    }
-  };
-
-  const saveAgent = (agent: Agent) => {
-    try {
-      localStorage.setItem(`agent-${agent.id}`, JSON.stringify(agent));
-    } catch (error) {
-      console.error('Error saving agent:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save agent configuration",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const loadAgents = (manager: AgentManager) => {
-    try {
-      // Clear existing agents first
-      manager.agents = [];
-      
-      // Iterate through localStorage to find agent entries
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith('agent-')) {
-          const agentData = localStorage.getItem(key);
-          if (agentData) {
-            try {
-              const agentJSON = JSON.parse(agentData);
-              const agent = Agent.fromJSON(agentJSON);
-              manager.addAgent(agent);
-            } catch (parseError) {
-              console.error('Error parsing agent data:', parseError);
-              // Remove corrupted data
-              localStorage.removeItem(key);
-            }
-          }
-        }
-      }
-
-      // Update the agents state with the loaded agents
-      setAgents([...manager.agents]);
-    } catch (error) {
-      console.error('Error loading agents:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load saved agents",
-        variant: "destructive"
-      });
+      ui.setWorking(false);
+      ui.setWorkingStatus("");
     }
   };
 
   const handleError = (error: string, context?: string) => {
-    if (agentManager && selectedAgent) {
-      agentManager.recordAgentError(selectedAgent.id, error, context);
-      const agentErrors = agentManager.getAgentErrors(selectedAgent.id);
-      setErrors(agentErrors as AgentError[]);
+    if (agentManager && agent.selectedAgent) {
+      agentManager.recordAgentError(agent.selectedAgent.id, error, context);
+      const agentErrors = agentManager.getAgentErrors(agent.selectedAgent.id);
+      ui.setErrors(agentErrors);
     }
   };
 
-  const handleClearErrors = () => {
-    if (agentManager && selectedAgent) {
-      agentManager.clearAgentErrors(selectedAgent.id);
-      setErrors([]);
-    }
-  };
-
-  if (loading || !agentManager) {
+  if (ui.isLoading || !agentManager) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <LoadingState 
+        message="Initializing agents and connectors..." 
+        className="min-h-screen"
+      />
     );
   }
 
   return (
-    <>
-      <div className="h-screen flex flex-col">
-        <div className="flex-1 container mx-auto px-8 py-6 overflow-hidden">
-          {!selectedAgent ? (
-            // Agent Canvas View
-            <div className="h-full overflow-auto">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-3xl font-bold tracking-tight">Agents</h2>
-                  <Button onClick={handleAddAgent}>
-                    <Plus className="mr-2 h-4 w-4" /> Add Agent
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {agents.map((agent) => (
-                    <AgentCard
-                      key={agent.id}
-                      agent={agent}
-                      onSelect={handleSelectAgent}
-                      onDelete={handleDeleteAgent}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            // Chat Interface
-            <div className="flex gap-6 h-full max-h-full overflow-hidden">
-              <AgentConfigSidebar
-                agent={selectedAgent}
-                connectors={connectors}
-                linkedAgents={agents.filter(a => a.id !== selectedAgent.id)}
-                onSave={handleUpdateAgent}
+    <div className="flex h-screen">
+      <div className="w-80 p-4 border-r flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Agents</h2>
+          <Button
+            onClick={handleAddAgent}
+            size="icon"
+            variant="outline"
+            disabled={ui.isLoading}
+          >
+            {ui.isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        <LoadingWrapper
+          isLoading={ui.isLoading}
+          message="Loading agents..."
+          className="flex-1"
+        >
+          <div className="flex flex-col gap-2 overflow-auto">
+            {agent.agents.map((a) => (
+              <AgentCard
+                key={a.id}
+                agent={a}
+                isSelected={a.id === agent.selectedAgent?.id}
+                onSelect={() => {
+                  agent.setSelectedAgent(a);
+                  // Load or create thread for this agent
+                  if (agentManager) {
+                    const existingThread = thread.getThreadFromHistory(a.id);
+                    if (existingThread) {
+                      // This will also load the messages
+                      thread.setCurrentThread(existingThread);
+                    } else {
+                      const newThread = agentManager.createThread();
+                      thread.setCurrentThread(newThread);
+                      thread.addThreadToHistory(newThread);
+                    }
+                  }
+                }}
+                onDelete={() => agent.removeAgent(a.id)}
               />
+            ))}
+          </div>
+        </LoadingWrapper>
+      </div>
+
+      <div className="flex-1 flex">
+        {agent.selectedAgent ? (
+          <>
+            <div className="flex-1 flex flex-col">
               <ChatInterface
-                selectedAgent={selectedAgent}
-                currentThread={currentThread}
-                historicMessages={historicMessages}
+                messages={thread.messages}
+                onSendMessage={handleSend}
                 input={input}
                 setInput={setInput}
-                isWorking={isWorking}
-                workingStatus={workingStatus}
-                onSend={handleSend}
-                onClearMessages={handleClearMessages}
-                onBack={() => setSelectedAgent(null)}
-                errors={errors}
-                onError={handleError}
-                onClearErrors={handleClearErrors}
-                agentManager={agentManager}
+                isWorking={ui.isWorking}
+                workingStatus={ui.workingStatus}
               />
             </div>
-          )}
-        </div>
+            <AgentConfigSidebar
+              agent={agent.selectedAgent}
+              errors={ui.errors}
+              connectors={connectors}
+              onUpdate={() => agent.updateAgent(agent.selectedAgent!)}
+            />
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            Select an agent to start chatting
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 }

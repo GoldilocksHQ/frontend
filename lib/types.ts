@@ -1,6 +1,5 @@
 "use client"
 
-import { UUID } from "crypto";
 import { Runnable } from "@langchain/core/runnables";
 import { StateGraph } from "@langchain/langgraph";
 
@@ -253,6 +252,14 @@ export enum ChainType {
   TASK_EXECUTION = "task_execution",
   CONVERSATION = "conversation",
   JUDGEMENT = "judgement"
+}
+
+export type UUID = string;
+
+export interface AgentError {
+  message: string;
+  context?: Record<string, unknown>;
+  timestamp?: number;
 }
 
 

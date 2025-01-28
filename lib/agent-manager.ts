@@ -21,6 +21,8 @@ import { ToolRegistry } from './tools/tool-registry';
 import { ConnectorTool } from './tools/tool-registry';
 import { Task } from "./types";
 
+export { AgentError } from './error-tracker';
+
 // Constants
 export const modelOptions: ModelOption[] = [
   { name: "gpt-4o-mini", provider: "openai", contextWindow: 16384, maxTokens: 16384 },
@@ -166,8 +168,10 @@ export class AgentManager {
 
   // Agent Management
   private validateAgent(agent: Agent): void {
-    if (!agent.agentName) throw new AgentError('Agent name is required');
-    if (!agent.selectedModel) throw new AgentError('Agent model is required');
+    if (!agent.agentName?.trim()) throw new AgentError('Agent name is required');
+    if (!agent.selectedModel?.name) throw new AgentError('Valid agent model is required');
+    if (!agent.systemPrompt?.trim()) throw new AgentError('System prompt is required');
+    if (!agent.agentDescription?.trim()) throw new AgentError('Agent description is required');
   }
 
   addAgent(agent: Agent) {
@@ -394,7 +398,7 @@ export class AgentManager {
 
     for (const agentTask of agentTaskList.tasks) {
       this.conversationManager.addTask(
-        taskList.id, {
+        taskList.id as UUID, {
         step: agentTask.step,
         sourceAgentId: agent.id,
         targetAgentId: agentTask.requiredAgent,
@@ -510,10 +514,16 @@ export class Agent {
   }
 
   toJSON(): AgentJSON {
+    // Validate before serializing to ensure we never store invalid state
+    if (!this.agentName?.trim()) throw new AgentError('Agent name is required');
+    if (!this.selectedModel?.name) throw new AgentError('Valid agent model is required');
+    if (!this.systemPrompt?.trim()) throw new AgentError('System prompt is required');
+    if (!this.agentDescription?.trim()) throw new AgentError('Agent description is required');
+
     return {
       id: this.id,
       agentName: this.agentName,
-      agentDescription: typeof this.agentDescription === 'string' ? this.agentDescription : String(this.agentDescription),
+      agentDescription: this.agentDescription,
       selectedModel: this.selectedModel,
       systemPrompt: this.systemPrompt,
       selectedTools: Array.from(this.selectedTools),
@@ -523,19 +533,21 @@ export class Agent {
   }
 
   static fromJSON(json: AgentJSON): Agent {
-    // Ensure description is a string
-    const description = typeof json.agentDescription === 'string' 
-      ? json.agentDescription 
-      : String(json.agentDescription);
+    // Validate required fields
+    if (!json.id) throw new AgentError('Agent ID is required');
+    if (!json.agentName?.trim()) throw new AgentError('Agent name is required');
+    if (!json.agentDescription?.trim()) throw new AgentError('Agent description is required');
+    if (!json.selectedModel?.name) throw new AgentError('Valid agent model is required');
+    if (!json.systemPrompt?.trim()) throw new AgentError('System prompt is required');
 
     const agent = new Agent(
-      json.id,
+      json.id as UUID,
       json.agentName,
-      description,
+      json.agentDescription,
       json.selectedModel,
       json.systemPrompt,
-      new Set(json.selectedTools),
-      new Set(json.linkedAgentIds),
+      new Set(json.selectedTools || []),
+      new Set(json.linkedAgentIds as UUID[] || []),
       json.chainConfig
     );
     return agent;
