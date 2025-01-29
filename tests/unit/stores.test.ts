@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useUIStore } from '../../lib/stores/ui-store';
 import { useAgentStore } from '../../lib/stores/agent-store';
 import { useThreadStore } from '../../lib/stores/thread-store';
-import { Agent } from '../../lib/agent-manager';
+import { Agent } from '../../backup/agent-manager';
 import { UUID } from 'crypto';
-import { ThreadStatus, Message, MessageType, Thread } from '../../lib/types';
+import { ThreadStatus, Message, MessageType, Thread } from '../../backup/types_legacy';
 
 describe('Store Tests', () => {
   beforeEach(() => {

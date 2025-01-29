@@ -1,72 +1,100 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Thread, Message, UUID } from '../types'
+import { Thread, Message, ThreadStatus } from '../core/thread'
 import { customStorage, logMiddleware } from './middleware'
 import { StateCreator } from 'zustand'
 
 interface ThreadState {
-  currentThread: Thread | null
-  messages: Message[]
-  threadHistory: Map<UUID, Thread>
+  threads: Map<string, Thread>;
+  currentThreadId: string | null;
   
-  // Actions
-  setCurrentThread: (thread: Thread | null) => void
-  setMessages: (messages: Message[]) => void
-  addMessage: (message: Message) => void
-  clearThread: () => void
-  addThreadToHistory: (thread: Thread) => void
-  getThreadFromHistory: (threadId: UUID) => Thread | undefined
+  // Thread Management
+  addThread: (thread: Thread) => void;
+  updateThread: (threadId: string, updates: Partial<Thread>) => void;
+  deleteThread: (threadId: string) => void;
+  getThread: (threadId: string) => Thread | undefined;
+  getThreadsByAgent: (agentId: string) => Thread[];
+  setCurrentThread: (threadId: string | null) => void;
+  
+  // Message Management
+  addMessage: (threadId: string, message: Message) => void;
+  getMessages: (threadId: string) => Message[];
+  getAllMessages: () => Message[];
 }
 
 const createThreadStore: StateCreator<ThreadState, [], [["zustand/persist", unknown]]> = (set, get) => ({
-  currentThread: null,
-  messages: [],
-  threadHistory: new Map(),
-  
-  // Actions
-  setCurrentThread: (thread: Thread | null) => {
-    if (thread) {
-      const existingThread = get().threadHistory.get(thread.id);
-      set({ 
-        currentThread: thread,
-        messages: existingThread?.messages || []
-      });
-    } else {
-      set({ currentThread: null, messages: [] });
-    }
+  threads: new Map(),
+  currentThreadId: null,
+
+  // Thread Management
+  addThread: (thread: Thread) => set((state) => {
+    const newThreads = new Map(state.threads);
+    newThreads.set(thread.id, thread);
+    return { threads: newThreads };
+  }),
+
+  updateThread: (threadId: string, updates: Partial<Thread>) => set((state) => {
+    const thread = state.threads.get(threadId);
+    if (!thread) return state;
+
+    const updatedThread = { ...thread, ...updates, updatedAt: Date.now() };
+    const newThreads = new Map(state.threads);
+    newThreads.set(threadId, updatedThread as Thread);
+    return { threads: newThreads };
+  }),
+
+  deleteThread: (threadId: string) => set((state) => {
+    const newThreads = new Map(state.threads);
+    newThreads.delete(threadId);
+    return { 
+      threads: newThreads,
+      currentThreadId: state.currentThreadId === threadId ? null : state.currentThreadId
+    };
+  }),
+
+  getThread: (threadId: string) => {
+    return get().threads.get(threadId);
   },
-  setMessages: (messages: Message[]) => {
-    const currentThread = get().currentThread;
-    if (currentThread) {
-      // Update both messages and thread history
-      const updatedThread = { ...currentThread, messages };
-      set((state) => ({
-        messages,
-        threadHistory: new Map(state.threadHistory).set(currentThread.id, updatedThread)
-      }));
-    } else {
-      set({ messages });
-    }
+
+  getThreadsByAgent: (agentId: string) => {
+    return Array.from(get().threads.values())
+      .filter(thread => 
+        thread.initiatingAgentId === agentId || 
+        thread.interactions.some(i => i.sourceAgentId === agentId || i.targetAgentId === agentId)
+      )
+      .sort((a, b) => b.createdAt - a.createdAt);
   },
-  addMessage: (message: Message) => {
-    const currentThread = get().currentThread;
-    if (currentThread) {
-      const newMessages = [...get().messages, message];
-      const updatedThread = { ...currentThread, messages: newMessages };
-      set((state) => ({
-        messages: newMessages,
-        threadHistory: new Map(state.threadHistory).set(currentThread.id, updatedThread)
-      }));
-    } else {
-      set((state) => ({ messages: [...state.messages, message] }));
-    }
+
+  setCurrentThread: (threadId: string | null) => set({ currentThreadId: threadId }),
+
+  // Message Management
+  addMessage: (threadId: string, message: Message) => set((state) => {
+    const thread = state.threads.get(threadId);
+    if (!thread) return state;
+
+    const updatedThread = {
+      ...thread,
+      interactions: [...thread.interactions, message],
+      messages: [...thread.messages, message],
+      updatedAt: Date.now()
+    };
+
+    const newThreads = new Map(state.threads);
+    newThreads.set(threadId, updatedThread as Thread);
+    return { threads: newThreads };
+  }),
+
+  getMessages: (threadId: string) => {
+    const thread = get().threads.get(threadId);
+    return thread?.messages || [];
   },
-  clearThread: () => set({ currentThread: null, messages: [] }),
-  addThreadToHistory: (thread: Thread) => set((state) => ({
-    threadHistory: new Map(state.threadHistory).set(thread.id, thread)
-  })),
-  getThreadFromHistory: (threadId: UUID) => get().threadHistory.get(threadId)
-})
+
+  getAllMessages: () => {
+    return Array.from(get().threads.values())
+      .flatMap(thread => thread.messages)
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+});
 
 export const useThreadStore = create<ThreadState>()(
   persist(
@@ -75,30 +103,41 @@ export const useThreadStore = create<ThreadState>()(
       name: 'goldilocks:threads',
       storage: customStorage,
       partialize: (state) => ({
-        threadHistory: Array.from(state.threadHistory.entries()),
-        currentThread: state.currentThread,
-        messages: state.messages
+        threads: Array.from(state.threads.entries()),
+        currentThreadId: state.currentThreadId
       }),
       onRehydrateStorage: () => (state) => {
-        if (state) {
-          // Restore thread history Map
-          if (state.threadHistory) {
-            state.threadHistory = new Map(state.threadHistory);
-          }
-          
-          // Ensure messages array exists
-          if (!state.messages) {
-            state.messages = [];
-          }
+        if (!state) return;
 
-          // If we have a current thread, load its messages
-          if (state.currentThread && state.threadHistory) {
-            const thread = state.threadHistory.get(state.currentThread.id);
-            if (thread) {
-              state.messages = thread.messages || [];
-            }
-          }
+        // Convert threads array back to Map
+        if (Array.isArray(state.threads)) {
+          state.threads = new Map(state.threads);
+        } else {
+          state.threads = new Map();
         }
+
+        // Ensure all threads have proper prototype methods
+        state.threads.forEach((thread, id) => {
+          const rehydratedThread = new Thread(
+            thread.id,
+            thread.initiatingAgentId,
+            thread.metadata
+          );
+          
+          // Restore thread state
+          rehydratedThread.status = thread.status || ThreadStatus.ACTIVE;
+          rehydratedThread.error = thread.error;
+          rehydratedThread.lastErrorAt = thread.lastErrorAt;
+          rehydratedThread.activeAgentId = thread.activeAgentId;
+          
+          // Restore interactions
+          thread.interactions?.forEach(interaction => {
+            rehydratedThread.addInteraction(interaction);
+          });
+
+          state.threads.set(id, rehydratedThread);
+        });
+
         return state;
       }
     }

@@ -1,8 +1,11 @@
-import { StateStorage, createJSONStorage } from 'zustand/middleware';
 import { StateCreator } from 'zustand';
+import { createJSONStorage, StateStorage } from 'zustand/middleware';
 
 const storage: StateStorage = {
   getItem: (name: string): string | null => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
     try {
       return localStorage.getItem(name);
     } catch (error) {
@@ -11,6 +14,9 @@ const storage: StateStorage = {
     }
   },
   setItem: (name: string, value: string): void => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     try {
       localStorage.setItem(name, value);
     } catch (error) {
@@ -18,12 +24,15 @@ const storage: StateStorage = {
     }
   },
   removeItem: (name: string): void => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     try {
       localStorage.removeItem(name);
     } catch (error) {
       console.warn('Error removing from localStorage:', error);
     }
-  },
+  }
 };
 
 export const customStorage = createJSONStorage(() => storage);

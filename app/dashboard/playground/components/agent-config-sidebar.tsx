@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Info } from "lucide-react";
-import { Agent, modelOptions } from "@/lib/agent-manager";
-import { UserActivationMappedConnector, ChainType, AgentError } from "@/lib/types";
+import { Agent, AgentConfig } from "@/lib/managers/agent-manager";
+import { ManagedError } from "@/lib/managers/error-manager";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,53 +9,62 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-
+import { ChainConfig, ChainType, ModelConfig } from "@/lib/managers/chain-manager";
+import { AgentManager } from "@/lib/managers/agent-manager";
+import Image from "next/image";
 interface AgentConfigSidebarProps {
   agent: Agent;
-  errors: AgentError[];
-  connectors: UserActivationMappedConnector[];
-  onUpdate: () => void;
+  errors: ManagedError[];
+  agentManager: AgentManager;
 }
 
-export function AgentConfigSidebar({
-  agent,
-  errors,
-  connectors,
-  onUpdate
-}: AgentConfigSidebarProps) {
-  const [name, setName] = useState(agent.agentName);
-  const [description, setDescription] = useState(agent.agentDescription);
-  const [selectedModel, setSelectedModel] = useState(agent.selectedModel);
-  const [systemPrompt, setSystemPrompt] = useState(agent.systemPrompt);
-  const [selectedTools, setSelectedTools] = useState<Set<string>>(agent.selectedTools);
-  const [chainType, setChainType] = useState<ChainType>(agent.chainConfig?.type || ChainType.CONVERSATION);
+export function AgentConfigSidebar({ agent, errors, agentManager }: AgentConfigSidebarProps) {
+  const [name, setName] = useState(agent.name);
+  const [description, setDescription] = useState(agent.description);
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set(agent.toolIds || []));
+  const [selectedModel, setSelectedModel] = useState<ModelConfig>(agentManager.getAvailableModels()[0]);
+  const [chainType, setChainType] = useState<ChainType>(ChainType.CONVERSATION);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
-    setName(agent.agentName);
-    setDescription(agent.agentDescription);
-    setSelectedModel(agent.selectedModel);
-    setSystemPrompt(agent.systemPrompt);
-    setSelectedTools(agent.selectedTools);
-    setChainType(agent.chainConfig?.type || ChainType.CONVERSATION);
+    setName(agent.name);
+    setDescription(agent.description);
+    setSelectedTools(new Set(agent.toolIds || []));
+
+    // Load chain config if exists
+    const chain = agent.chainId ? agentManager.getChain(agent.chainId) : undefined;
+    if (chain) {
+      setSelectedModel(chain.model);
+      setChainType(chain.type);
+    }
+
     setHasUnsavedChanges(false);
   }, [agent]);
 
-  const handleSave = () => {
-    agent.editName(name);
-    agent.editDescription(description);
-    agent.selectModel(selectedModel);
-    agent.setSystemPrompt(systemPrompt);
-    agent.setTools(selectedTools);
-    agent.chainConfig = {
-      type: chainType,
-      model: selectedModel,
-      memory: true,
-      tools: Array.from(selectedTools)
-    };
-    
-    onUpdate();
-    setHasUnsavedChanges(false);
+  const handleSave = async () => {
+    try {
+      // Create or update chain
+      const newChainConfig: ChainConfig = {
+        type: chainType,
+        model: selectedModel,
+        memory: true,
+        tools: Array.from(selectedTools)
+      };
+
+      const newAgentConfig: AgentConfig = {
+        name: name,
+        description: description,
+        chainType: chainType,
+        modelName: selectedModel.name,
+        toolIds: Array.from(selectedTools)
+      };
+
+      // Update agent with new chain and basic info
+      await agentManager.updateAgent(agent.id, newAgentConfig, newChainConfig);
+      setHasUnsavedChanges(false);
+    } catch (error) {
+      console.error('Failed to update agent:', error);
+    }
   };
 
   return (
@@ -79,8 +88,8 @@ export function AgentConfigSidebar({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {errors.map((error, index) => (
-                <div key={index} className="text-sm text-destructive">
+              {errors.map((error) => (
+                <div key={error.id} className="text-sm text-destructive">
                   {error.message}
                 </div>
               ))}
@@ -117,7 +126,7 @@ export function AgentConfigSidebar({
           <Select
             value={selectedModel.name}
             onValueChange={(value) => {
-              const model = modelOptions.find(m => m.name === value);
+              const model = agentManager.getAvailableModels().find(m => m.name === value);
               if (model) {
                 setSelectedModel(model);
                 setHasUnsavedChanges(true);
@@ -128,24 +137,13 @@ export function AgentConfigSidebar({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {modelOptions.map((model) => (
+              {agentManager.getAvailableModels().map((model) => (
                 <SelectItem key={model.name} value={model.name}>
                   {model.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>System Prompt</Label>
-          <Textarea
-            value={systemPrompt}
-            onChange={(e) => {
-              setSystemPrompt(e.target.value);
-              setHasUnsavedChanges(true);
-            }}
-          />
         </div>
 
         <div className="space-y-2">
@@ -161,7 +159,7 @@ export function AgentConfigSidebar({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Object.values(ChainType).map((type) => (
+              {agentManager.getAvailableChainTypes().map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
                 </SelectItem>
@@ -173,30 +171,40 @@ export function AgentConfigSidebar({
         <div className="space-y-2">
           <Label>Tools</Label>
           <div className="space-y-1">
-            {connectors.map((connector) => (
+            {agentManager.getAllAvailableTools().map((tool) => (
               <div
-                key={connector.id}
+                key={tool.id}
                 className={cn(
                   "flex items-center gap-2 p-2 rounded-lg transition-colors cursor-pointer text-sm",
-                  selectedTools.has(connector.id) 
+                  selectedTools.has(tool.id) 
                     ? "bg-primary/10 hover:bg-primary/15" 
                     : "hover:bg-muted"
                 )}
                 onClick={() => {
                   const newTools = new Set(selectedTools);
-                  if (newTools.has(connector.id)) {
-                    newTools.delete(connector.id);
+                  if (newTools.has(tool.id)) {
+                    newTools.delete(tool.id);
                   } else {
-                    newTools.add(connector.id);
+                    newTools.add(tool.id);
                   }
                   setSelectedTools(newTools);
                   setHasUnsavedChanges(true);
                 }}
               >
-                <div className="w-5 h-5 rounded-full bg-background flex items-center justify-center text-xs">
-                  {connector.displayName.charAt(0).toUpperCase()}
+                <div className="w-5 h-5 rounded-full bg-background flex items-center justify-center text-xs overflow-hidden">
+                  <Image
+                    src={`/logos/${tool.name.toLowerCase()}.svg`}
+                    alt={tool.name}
+                    width={20}
+                    height={20}
+                    className="object-contain p-1"
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
                 </div>
-                <span className="flex-1">{connector.displayName}</span>
+                <span className="flex-1">{tool.name}</span>
               </div>
             ))}
           </div>

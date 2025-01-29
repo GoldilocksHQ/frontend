@@ -1,65 +1,47 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AgentManager, Agent } from "@/lib/agent-manager";
 import { useToast } from "@/hooks/use-toast";
-import { UUID } from "crypto";
 import { AgentCard } from "./components/agent-card";
 import { AgentConfigSidebar } from "./components/agent-config-sidebar";
 import { ChatInterface } from "./components/chat-interface";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
-import { UserActivationMappedConnector, MessageType } from "@/lib/types";
-import { useStores } from "@/lib/stores";
 import { LoadingState, LoadingWrapper } from "@/app/components/common/loading-state";
-import { AgentError } from "@/lib/agent-manager";
+import { AgentManager } from "@/lib/managers/agent-manager";
+import { ConversationManager } from "@/lib/managers/conversation-manager";
+import { useStores } from "@/lib/stores";
+import { ConnectorManager } from "@/lib/managers/connector-manager";
+import { InteractionType, Message, MessageRole } from "@/lib/core/thread";
 
 export default function PlaygroundPage() {
-  const { ui, agent, thread } = useStores();
+  const { uiState: ui, agentState: agent } = useStores();
+  const [, setConnectorManager] = useState<ConnectorManager | null>(null);
   const [agentManager, setAgentManager] = useState<AgentManager | null>(null);
-  const [connectors, setConnectors] = useState<UserActivationMappedConnector[]>([]);
+  const [conversationManager, setConversationManager] = useState<ConversationManager | null>(null);
   const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
 
   const { toast } = useToast();
 
-  // Initialize Connectors and Agents Managers
+  // Initialize Managers
   useEffect(() => {
     const initializeManagers = async () => {
       try {
         ui.setLoading(true);
+        // Initialize managers
+        const connectorMgr = ConnectorManager.getInstance();
+        await connectorMgr.initialize();
+        setConnectorManager(connectorMgr);
         
-        // Initialize the Agent Manager
-        const manager = await AgentManager.getInstance();
-        setAgentManager(manager);
+        const agentMgr = AgentManager.getInstance(connectorMgr.getToolManager());
+        await agentMgr.initialize();
+        setAgentManager(agentMgr);
+        
+        const conversationMgr = ConversationManager.getInstance();
+        await conversationMgr.initialize();
+        setConversationManager(conversationMgr);
 
-        // Initialize the Connector Manager and load connectors
-        const loadedConnectors = await manager.getConnectors();
-        setConnectors(loadedConnectors);
-
-        // Create a new thread if none exists
-        if (!thread.currentThread) {
-          const newThread = manager.createThread();
-          thread.setCurrentThread(newThread);
-        }
-
-        // Add existing agents to the manager
-        agent.agents.forEach(savedAgent => {
-          try {
-            manager.addAgent(savedAgent);
-          } catch (error) {
-            console.error(`Error adding agent to manager:`, error);
-            if (error instanceof AgentError) {
-              console.warn(`Invalid agent data:`, error.message);
-              // Remove invalid agent from store
-              agent.removeAgent(savedAgent.id);
-            }
-            toast({
-              title: "Warning",
-              description: `Failed to load agent: ${error instanceof Error ? error.message : 'Unknown error'}`,
-              variant: "destructive",
-            });
-          }
-        });
       } catch (error) {
         console.error("Failed to initialize managers:", error);
         toast({
@@ -75,6 +57,21 @@ export default function PlaygroundPage() {
     initializeManagers();
   }, []);
 
+  // Load messages when agent is selected
+  useEffect(() => {
+    if (agent.selectedAgent && conversationManager) {
+      // Get all messages for this agent
+      const agentInteractions = conversationManager.getInteractionsByAgent(agent.selectedAgent.id);
+      const messageHistory = agentInteractions
+        .filter(interaction => interaction.type === InteractionType.MESSAGE)
+        .sort((a, b) => a.createdAt - b.createdAt) as Message[];
+      
+      setMessages(messageHistory);
+    } else {
+      setMessages([]);
+    }
+  }, [agent.selectedAgent, conversationManager]);
+
   const handleAddAgent = async () => {
     if (!agentManager) {
       toast({
@@ -86,35 +83,29 @@ export default function PlaygroundPage() {
     }
 
     try {
-      const newAgent = new Agent(
-        crypto.randomUUID() as UUID,
-        `Agent ${agent.agents.length + 1}`,
-        "New Agent Description",
-        agent.selectedModel,
-        "Default system prompt",
-        new Set<string>(),
-        new Set<UUID>(),
-      );
-      
-      agentManager.addAgent(newAgent);
-      agent.addAgent(newAgent);
-      
+      // Create the agent - AgentManager will handle chain creation internally
+      await agentManager.createAgent({
+        name: `Agent ${agentManager.getAllAgents().length + 1}`,
+        description: "New Agent Description",
+        chainType: agentManager.getAvailableChainTypes()[0],
+        modelName: agentManager.getAvailableModels()[0].name,
+        toolIds: [],
+      });
       toast({
         title: "Success",
         description: "New agent created successfully.",
       });
     } catch (error) {
-      console.error('Error adding agent:', error);
       toast({
         title: "Error",
-        description: "Failed to create new agent",
+        description: error instanceof Error ? error.message : "Failed to create new agent",
         variant: "destructive"
       });
     }
   };
 
   const handleSend = async (message: string) => {
-    if (!agent.selectedAgent || !thread.currentThread || !agentManager) {
+    if (!agent.selectedAgent || !conversationManager) {
       toast({
         title: "Error",
         description: "Please select an agent first",
@@ -124,65 +115,57 @@ export default function PlaygroundPage() {
     }
 
     try {
+      // Create a new thread for this message
+      const threadId = await conversationManager.createThread(agent.selectedAgent.id);
+
+      // Create and add user message immediately
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        threadId,
+        type: InteractionType.MESSAGE,
+        role: MessageRole.USER,
+        content: message,
+        targetAgentId: agent.selectedAgent.id,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      setMessages(prev => [...prev, userMessage]);
+      setInput(""); // Clear input immediately after showing message
+
+      // Start processing
       ui.setWorking(true);
       ui.setWorkingStatus("Processing message...");
 
-      // Add user message to thread
-      const userMessage = agentManager.addMessageToThread({
-        threadId: thread.currentThread.id,
-        role: "user",
-        content: message,
-        messageType: MessageType.USER_TO_AGENT,
-        targetAgentId: agent.selectedAgent.id,
-        timestamp: Date.now(),
-        metadata: {}
-      });
-      
-      // Update UI with user message
-      thread.addMessage(userMessage);
-
-      // Get the chain type from agent's configuration or default to conversation
-      const chainType = agent.selectedAgent.chainConfig?.type?.toLowerCase() || "conversation";
-
-      // Execute conversation
-      const result = await agentManager.kickOffConversation(
-        agent.selectedAgent, 
-        chainType, 
-        thread.currentThread.id as UUID
+      // Send message through conversation manager
+      await conversationManager.handleUserMessage(
+        agent.selectedAgent.id,
+        threadId,
+        message
       );
 
-      if (result instanceof Error) {
-        console.error("Error:", result);
-        handleError(result.message);
-      } else {
-        // Add agent's response to the thread store
-        thread.addMessage(result);
+      // Update messages with the agent's response
+      const thread = conversationManager.getThread(threadId);
+      if (thread) {
+        const agentMessages = thread.messages.filter(m => m.role === MessageRole.ASSISTANT);
+        setMessages(prev => [...prev, ...agentMessages]);
       }
 
-      setInput("");
     } catch (error) {
-      console.error("Error sending message:", error);
-      if (error instanceof Error) {
-        handleError(error.message);
-      }
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to send message",
+        variant: "destructive"
+      });
     } finally {
       ui.setWorking(false);
       ui.setWorkingStatus("");
     }
   };
 
-  const handleError = (error: string, context?: string) => {
-    if (agentManager && agent.selectedAgent) {
-      agentManager.recordAgentError(agent.selectedAgent.id, error, context);
-      const agentErrors = agentManager.getAgentErrors(agent.selectedAgent.id);
-      ui.setErrors(agentErrors);
-    }
-  };
-
-  if (ui.isLoading || !agentManager) {
+  if (ui.isLoading || !agentManager || !conversationManager) {
     return (
       <LoadingState 
-        message="Initializing agents and connectors..." 
+        message="Initializing managers..." 
         className="min-h-screen"
       />
     );
@@ -212,27 +195,17 @@ export default function PlaygroundPage() {
           className="flex-1"
         >
           <div className="flex flex-col gap-2 overflow-auto">
-            {agent.agents.map((a) => (
+            {agentManager.getAllAgents().map((a) => (
               <AgentCard
                 key={a.id}
                 agent={a}
                 isSelected={a.id === agent.selectedAgent?.id}
                 onSelect={() => {
                   agent.setSelectedAgent(a);
-                  // Load or create thread for this agent
-                  if (agentManager) {
-                    const existingThread = thread.getThreadFromHistory(a.id);
-                    if (existingThread) {
-                      // This will also load the messages
-                      thread.setCurrentThread(existingThread);
-                    } else {
-                      const newThread = agentManager.createThread();
-                      thread.setCurrentThread(newThread);
-                      thread.addThreadToHistory(newThread);
-                    }
-                  }
                 }}
-                onDelete={() => agent.removeAgent(a.id)}
+                onDelete={() => {
+                  agentManager.deleteAgent(a.id);
+                }}
               />
             ))}
           </div>
@@ -244,19 +217,18 @@ export default function PlaygroundPage() {
           <>
             <div className="flex-1 flex flex-col">
               <ChatInterface
-                messages={thread.messages}
+                interfaceMessages={messages}
                 onSendMessage={handleSend}
-                input={input}
-                setInput={setInput}
                 isWorking={ui.isWorking}
                 workingStatus={ui.workingStatus}
+                input={input}
+                setInput={setInput}
               />
             </div>
-            <AgentConfigSidebar
+            <AgentConfigSidebar 
               agent={agent.selectedAgent}
               errors={ui.errors}
-              connectors={connectors}
-              onUpdate={() => agent.updateAgent(agent.selectedAgent!)}
+              agentManager={agentManager}
             />
           </>
         ) : (

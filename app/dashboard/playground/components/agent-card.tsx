@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
-import { Agent } from "@/lib/agent-manager";
+import { Agent } from "@/lib/managers/agent-manager";
 import { cn } from "@/lib/utils";
 
 interface AgentCardProps {
@@ -22,7 +22,7 @@ export function AgentCard({ agent, isSelected, onSelect, onDelete }: AgentCardPr
     >
       <CardHeader className="p-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg truncate">{agent.agentName}</CardTitle>
+          <CardTitle className="text-lg truncate">{agent.name}</CardTitle>
           <Button
             variant="ghost"
             size="icon"
@@ -38,7 +38,7 @@ export function AgentCard({ agent, isSelected, onSelect, onDelete }: AgentCardPr
       </CardHeader>
       <CardContent className="p-4 pt-0">
         <p className="text-sm text-muted-foreground line-clamp-2">
-          {agent.agentDescription}
+          {agent.description}
         </p>
       </CardContent>
     </Card>

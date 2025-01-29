@@ -1,12 +1,12 @@
 import { useRef, useEffect } from "react";
-import { Message } from "@/lib/types";
+import { Message, MessageRole } from "@/lib/core/thread";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatInterfaceProps {
-  messages: Message[];
+  interfaceMessages: Message[];
   input: string;
   setInput: (input: string) => void;
   isWorking: boolean;
@@ -15,12 +15,12 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({
-  messages,
+  interfaceMessages,
   input,
   setInput,
   isWorking,
   workingStatus,
-  onSendMessage
+  onSendMessage,
 }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -30,23 +30,23 @@ export function ChatInterface({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isWorking]);
+  }, [interfaceMessages, isWorking]);
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-auto p-4 space-y-3">
-        {messages.map((message) => (
+        {interfaceMessages.map((message) => (
           <div
             key={message.id}
             className={cn(
               "flex",
-              message.role === "user" ? "justify-end" : "justify-start"
+              message.role === MessageRole.USER ? "justify-end" : "justify-start"
             )}
           >
             <div
               className={cn(
                 "max-w-[80%] rounded-lg px-4 py-2",
-                message.role === "user"
+                message.role === MessageRole.USER
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted"
               )}

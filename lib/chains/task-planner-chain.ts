@@ -2,9 +2,9 @@ import { BaseChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { BufferMemory } from "langchain/memory";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { Tool } from "@langchain/core/tools";
-import { AgentTaskList } from "../../types";
+import { type AgentPlan} from "../core/thread";
 import { z } from "zod";
+import { ToolDefinition } from "../managers/tool-manager";
 
 // TASK_PLANNING_TEMPLATE
 
@@ -50,23 +50,27 @@ const responseSchema = z.object({
 });
 
 interface TaskPlannerInput {
-  input: string;
+  input: {
+    content: string;
+  }
 }
 
 interface TaskPlannerChainInput {
   model: ChatOpenAI;
   memory?: BufferMemory;
-  tools?: Tool[];
+  tools?: ToolDefinition[];
 }
 
 export class TaskPlannerChain extends BaseChain {
+  public id: string;
   private model: ChatOpenAI;
   public memory?: BufferMemory;
-  private tools: Tool[];
+  private tools: ToolDefinition[];
   private prompt: PromptTemplate;
 
   constructor(input: TaskPlannerChainInput) {
     super();
+    this.id = crypto.randomUUID() as string;
     this.model = input.model;
     this.memory = input.memory;
     this.tools = input.tools || [];
@@ -88,16 +92,16 @@ export class TaskPlannerChain extends BaseChain {
     return ["agentMission"];
   }
 
-  async _call(values: TaskPlannerInput): Promise<{ agentTaskList: AgentTaskList }> {
+  async _call(values: TaskPlannerInput): Promise<{ agentPlan: AgentPlan }> {
     try {
       // Format tools for prompt
       const toolDescriptions = this.tools.map(tool => 
-        `- ${tool.name}: ${tool.description}`
-      ).join("\n");
+        `- ${tool.name}\nFunctions:\n ${tool.functions.map(func => `- ${func.name}: ${func.description}`).join("\n")}`
+      ).join("\n\n");
 
       // Generate prompt
       const prompt = await this.prompt.format({
-        input: values.input,
+        input: values.input.content,
         tools: toolDescriptions,
       });
 
@@ -108,28 +112,41 @@ export class TaskPlannerChain extends BaseChain {
         { role: "system", content: prompt }
       ]);
 
-      // Parse response into AgentTaskList
-      const agentTaskList = response as AgentTaskList;
+      // Convert to a Plan
+      const agentPlan: AgentPlan = {
+        goal: response.goal,
+        tasks: response.tasks.map((task) => {
+          return {
+            step: task.step,
+            instruction: task.instruction,
+            tools: task.tools.filter((tool): tool is string => tool !== undefined),
+            dependencies: task.dependencies.map((dependency) => dependency.toString()),
+            requiredAgent: task.requiredAgent,
+            reasoning: task.reasoning
+          };
+        }),
+        reasoning: response.reasoning,
+      };
 
       // Validate task list
-      this.validateTaskList(agentTaskList);
+      this.validateTaskList(agentPlan);
 
-      return { agentTaskList };
+      return { agentPlan };
     } catch (error) {
       throw new Error(`Failed to create task plan: ${error}`);
     }
   }
 
-  private validateTaskList(agentTaskList: AgentTaskList): void {
-    if (!agentTaskList.goal || typeof agentTaskList.goal !== "string") {
+  private validateTaskList(agentPlan: AgentPlan): void {
+    if (!agentPlan.goal || typeof agentPlan.goal !== "string") {
       throw new Error("Task plan must include a goal string");
     }
 
-    if (!Array.isArray(agentTaskList.tasks) || agentTaskList.tasks.length === 0) {
+    if (!Array.isArray(agentPlan.tasks) || agentPlan.tasks.length === 0) {
       throw new Error("Task plan must include at least one task");
     }
 
-    for (const task of agentTaskList.tasks) {
+    for (const task of agentPlan.tasks) {
       if (!task.step || typeof task.step !== "number") {
         throw new Error("Each task must have a number step");
       }
@@ -151,7 +168,7 @@ export class TaskPlannerChain extends BaseChain {
       }
     }
 
-    if (!agentTaskList.reasoning || typeof agentTaskList.reasoning !== "string") {
+    if (!agentPlan.reasoning || typeof agentPlan.reasoning !== "string") {
       throw new Error("Task plan must include overall reasoning");
     }
   }

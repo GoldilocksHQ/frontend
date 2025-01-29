@@ -2,7 +2,6 @@ import { BaseChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { BufferMemory } from "langchain/memory";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { MessageType } from "../../types";
 
 const CONVERSATION_TEMPLATE = `You are a conversational assistant. Your role is to engage in natural dialogue while maintaining context.
 
@@ -12,14 +11,11 @@ Previous messages:
 Current message:
 {content}
 
-Message type: {messageType}
-
 Respond naturally and appropriately for the message type. Keep responses concise and focused.`;
 
 interface ConversationInput {
   input: {
     content: string;
-    messageType: MessageType;
   }
 }
 
@@ -29,17 +25,19 @@ interface ConversationChainInput {
 }
 
 export class ConversationChain extends BaseChain {
+  public id: string;
   private model: ChatOpenAI;
   public memory?: BufferMemory;
   private prompt: PromptTemplate;
 
   constructor(input: ConversationChainInput) {
     super();
+    this.id = crypto.randomUUID() as string;
     this.model = input.model;
     this.memory = input.memory;
     this.prompt = new PromptTemplate({
       template: CONVERSATION_TEMPLATE,
-      inputVariables: ["history", "content", "messageType"]
+      inputVariables: ["history", "content"]
     });
   }
 
@@ -66,7 +64,6 @@ export class ConversationChain extends BaseChain {
       const prompt = await this.prompt.format({
         history,
         content: values.input.content,
-        messageType: values.input.messageType
       });
 
       // Get completion from model

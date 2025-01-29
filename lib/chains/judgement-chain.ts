@@ -1,7 +1,7 @@
 import { BaseChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { Judgement } from "../../types";
+import { AgentJudgement } from "../core/thread";
 import { z } from "zod";
 
 const JUDGEMENT_TEMPLATE = `You are a judgement assistant. Your role is to evaluate if a response satisfies the given requirements.
@@ -18,18 +18,6 @@ Evaluate the response based on:
 3. Completeness
 4. Missing elements or gaps
 `;
-
-// Respond with a JSON object in this format:
-// {
-//   "satisfied": true/false,
-//   "score": 0-100,
-//   "analysis": {
-//     "strengths": ["point1", "point2"],
-//     "weaknesses": ["point1", "point2"],
-//     "missing": ["element1", "element2"]
-//   },
-//   "feedback": "Detailed explanation of the evaluation"
-// }`;
 
 const responseSchema = z.object({
   satisfied: z.boolean().describe("Whether the response satisfies the requirements"),
@@ -54,11 +42,13 @@ interface JudgementChainInput {
 }
 
 export class JudgementChain extends BaseChain {
+  public id: string;
   private model: ChatOpenAI;
   private prompt: PromptTemplate;
 
   constructor(input: JudgementChainInput) {
     super();
+    this.id = crypto.randomUUID() as string;
     this.model = input.model;
     this.prompt = new PromptTemplate({
       template: JUDGEMENT_TEMPLATE,
@@ -78,7 +68,7 @@ export class JudgementChain extends BaseChain {
     return ["judgement"];
   }
 
-  async _call(values: JudgementInput): Promise<{ judgement: Judgement }> {
+  async _call(values: JudgementInput): Promise<{ agentJudgement: AgentJudgement }> {
     try {
       // Generate prompt
       const prompt = await this.prompt.format({
@@ -95,18 +85,18 @@ export class JudgementChain extends BaseChain {
 
       // Parse response into judgement
       // const judgement = JSON.parse(response.content as string) as Judgement;
-      const judgement = response as Judgement;
+      const agentJudgement = response as AgentJudgement;
 
       // Validate judgement
-      this.validateJudgement(judgement);
+      this.validateJudgement(agentJudgement);
 
-      return { judgement };
+      return { agentJudgement };
     } catch (error) {
       throw new Error(`Failed to evaluate response: ${error}`);
     }
   }
 
-  private validateJudgement(judgement: Judgement): void {
+  private validateJudgement(judgement: AgentJudgement): void {
     if (typeof judgement.satisfied !== "boolean") {
       throw new Error("Judgement must include a boolean satisfied flag");
     }

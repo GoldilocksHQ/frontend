@@ -4,15 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { UserActivationMappedConnector } from "@/lib/types";
-import { ConnectorManager } from "@/lib/connector-manager";
+import { Connector, ConnectorManager } from "@/lib/managers/connector-manager";
 import path from "path";
 import { Loader2 } from "lucide-react";
-
+import { UUID } from "@/lib/types";
 
 export default function ConnectorsPage() {
-  const [connectors, setConnectors] = useState<UserActivationMappedConnector[]>([]);
-  const [selectedConnector, setSelectedConnector] = useState<UserActivationMappedConnector | null>(null);
+  const [connectors, setConnectors] = useState<Array<Connector & { isConnected: boolean }>>([]);
+  const [selectedConnectorId, setSelectedConnectorId] = useState<UUID | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const logoPath = path.join("../../", "logos");
@@ -25,10 +24,23 @@ export default function ConnectorsPage() {
   const initializeConnectors = async () => {
     try {
       setLoading(true);
-      const manager = await ConnectorManager.getInstance();
+      const manager = ConnectorManager.getInstance();
+      await manager.initialize();
       setConnectorManager(manager);
-      const fetchedConnectors = await manager.getConnectors();
-      setConnectors(fetchedConnectors);
+      const fetchedConnectors = manager.getConnectors();
+      
+      // Get connection status for each connector
+      const connectorsWithStatus = await Promise.all(
+        fetchedConnectors.map(async (connector) => {
+          const status = manager.getConnectorStatus(connector.id);
+          return {
+            ...connector,
+            isConnected: status?.isConnected || false
+          };
+        })
+      );
+      
+      setConnectors(connectorsWithStatus);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Initialization failed");
     } finally {
@@ -36,23 +48,23 @@ export default function ConnectorsPage() {
     }
   };
 
-  const handleConnect = async (connector: UserActivationMappedConnector) => {
+  const handleConnect = async (connector: Connector & { isConnected: boolean }) => {
     setError(null);
-    setSelectedConnector(connector);
+    setSelectedConnectorId(connector.id);
     try {
-      const data = await connectorManager?.connectConnector(connector);
+      const response = await connectorManager?.connect(connector.id);
       
-      if (data?.error) {
-        throw new Error(data.error);
+      if (response?.error) {
+        throw new Error(response.error);
       }
 
-      if (data.url) {
-        window.location.href = data.url;
+      if (response?.authUrl) {
+        window.location.href = response.authUrl;
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to connect');
     } finally {
-      setSelectedConnector(null);
+      setSelectedConnectorId(null);
     }
   };
 
@@ -74,7 +86,6 @@ export default function ConnectorsPage() {
         {connectors.map((connector) => (
           <Card key={connector.id} className="p-6">
             <div className="flex flex-col h-full items-center">
-
               <Image 
                 src={`${logoPath}/${connector.name}.svg`}
                 alt={`${connector.displayName} thumbnail`}
@@ -89,11 +100,11 @@ export default function ConnectorsPage() {
               <div className="mt-auto">
                 <Button
                   className="w-full"
-                  disabled={connector.isConnected || selectedConnector?.id === connector.id}
+                  disabled={connector.isConnected || selectedConnectorId === connector.id}
                   variant={connector.isConnected ? "secondary" : "default"}
                   onClick={() => handleConnect(connector)}
                 >
-                  {selectedConnector?.id === connector.id ? (
+                  {selectedConnectorId === connector.id ? (
                     <>
                       <svg className="animate-spin -ml-1 mr-2 h-4 w-4" viewBox="0 0 24 24">
                         <circle 

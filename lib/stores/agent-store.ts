@@ -1,15 +1,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Agent, modelOptions } from '../agent-manager'
-import { UUID, ModelOption, AgentJSON } from '../types'
+import { Agent, AgentJSON } from '../managers/agent-manager'
+import { models, ModelConfig } from '../managers/chain-manager'
+import { UUID } from '../types'
 import { customStorage, logMiddleware } from './middleware'
 import { StateCreator } from 'zustand'
 
-interface AgentState {
+export interface AgentState {
+  _hasHydrated: boolean
   agents: Agent[]
   selectedAgent: Agent | null
   linkedAgents: Map<UUID, Agent[]>
-  selectedModel: ModelOption
+  selectedModel: ModelConfig
   
   // Actions
   setAgents: (agents: Agent[]) => void
@@ -18,14 +20,15 @@ interface AgentState {
   updateAgent: (agent: Agent) => void
   removeAgent: (agentId: UUID) => void
   setLinkedAgents: (agentId: UUID, linkedAgents: Agent[]) => void
-  setSelectedModel: (model: ModelOption) => void
+  setSelectedModel: (model: ModelConfig) => void
 }
 
-const createAgentStore: StateCreator<AgentState, [], [["zustand/persist", unknown]]> = (set) => ({
+export const createAgentStore: StateCreator<AgentState, [], [["zustand/persist", unknown]]> = (set) => ({
+  _hasHydrated: false,
   agents: [],
   selectedAgent: null,
   linkedAgents: new Map(),
-  selectedModel: modelOptions[0],
+  selectedModel: models[0],
   
   // Actions
   setAgents: (agents: Agent[]) => set({ agents }),
@@ -42,7 +45,7 @@ const createAgentStore: StateCreator<AgentState, [], [["zustand/persist", unknow
   setLinkedAgents: (agentId: UUID, linkedAgents: Agent[]) => set((state) => ({
     linkedAgents: new Map(state.linkedAgents).set(agentId, linkedAgents)
   })),
-  setSelectedModel: (model: ModelOption) => set({ selectedModel: model })
+  setSelectedModel: (model: ModelConfig) => set({ selectedModel: model })
 })
 
 export const useAgentStore = create<AgentState>()(
@@ -54,7 +57,7 @@ export const useAgentStore = create<AgentState>()(
       partialize: (state) => {
         console.log('Partializing state:', state);
         const partialState = {
-          agents: state.agents.map(agent => agent.toJSON()),
+          agents: state.agents,
           selectedModel: state.selectedModel
         };
         console.log('Serialized state:', partialState);
@@ -65,8 +68,8 @@ export const useAgentStore = create<AgentState>()(
         if (state?.agents) {
           try {
             // We know the stored data is in AgentJSON format
-            const agentDataArray = state.agents as unknown as AgentJSON[];
-            state.agents = agentDataArray.map(agentData => Agent.fromJSON(agentData));
+            const agentDataArray = state.agents as AgentJSON[];
+            state.agents = agentDataArray;
             console.log('Successfully rehydrated agents:', state.agents);
           } catch (error) {
             console.error('Failed to rehydrate agents:', error);
@@ -77,4 +80,4 @@ export const useAgentStore = create<AgentState>()(
       }
     }
   )
-) 
+)

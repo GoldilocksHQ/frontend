@@ -3,7 +3,8 @@ import { ChatOpenAI } from "@langchain/openai";
 import { BufferMemory } from "langchain/memory";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { z } from "zod";
-import { ConnectorTool } from "@/lib/tools/tool-registry";
+import { ToolDefinition } from "../managers/tool-manager";
+import { AgentToolCall } from "../core/thread";
 
 const TASK_EXECUTION_TEMPLATE = `You are a task execution assistant. Your role is to analyze tasks and determine which connector and function to use to accomplish them.
 
@@ -34,7 +35,7 @@ const responseSchema = z.object({
 interface TaskExecutorInput {
   input: {
     task: string;
-    available_tools: Array<ConnectorTool>;
+    available_tools: Array<ToolDefinition>;
   }
 }
 
@@ -44,12 +45,14 @@ interface TaskExecutorChainInput {
 }
 
 export class TaskExecutorChain extends BaseChain {
+  public id: string;
   private model: ChatOpenAI;
   public memory?: BufferMemory;
   private prompt: PromptTemplate;
 
   constructor(input: TaskExecutorChainInput) {
     super();
+    this.id = crypto.randomUUID() as string;
     this.model = input.model;
     this.memory = input.memory;
     this.prompt = new PromptTemplate({
@@ -70,7 +73,7 @@ export class TaskExecutorChain extends BaseChain {
     return ["result"];
   }
 
-  async _call(values: TaskExecutorInput): Promise<{ result: { response: string; execution: { connectorName: string; functionName: string; parameters: Record<string, unknown>; } } }> {
+  async _call(values: TaskExecutorInput): Promise<{ agentToolCall: AgentToolCall }> {
     try {
       // Format tools for prompt
       const toolDescriptions = values.input.available_tools.map(tool => {
@@ -78,7 +81,7 @@ export class TaskExecutorChain extends BaseChain {
           `    - ${func.name}: ${func.description}\n      Parameters: ${JSON.stringify(func.parameters, null, 2)}`
         ).join('\n');
         
-        return `- ${tool.name}: ${tool.description}\n  Functions:\n${functionDescriptions}`;
+        return `- ${tool.name}: Functions:\n${functionDescriptions}`;
       }).join('\n\n');
 
       // Generate prompt
@@ -90,11 +93,11 @@ export class TaskExecutorChain extends BaseChain {
       const modelWithStructuredOutput = this.model.withStructuredOutput(responseSchema);
 
       // Get completion from model
-      const result = await modelWithStructuredOutput.invoke([
+      const agentToolCall = await modelWithStructuredOutput.invoke([
         { role: "system", content: prompt }
       ]);
 
-      return { result };
+      return { agentToolCall };
     } catch (error) {
       throw new Error(`Failed to execute task: ${error}`);
     }

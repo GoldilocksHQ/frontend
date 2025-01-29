@@ -1,5 +1,5 @@
 import { queryDatabase } from "../supabase/server";
-import { Connector} from "../../lib/types";
+import { Connector} from "../../backup/types_legacy";
 import { handleFunction as handleGoogleSheetsFunction } from "@/connectors/google-sheets/connector";
 import { handleFunction as handleGoogleDriveFunction } from "@/connectors/google-drive/connector";
 import { handleFunction as handleGoogleDocsFunction } from "@/connectors/google-docs/connector";

@@ -5,7 +5,7 @@ import { User } from "@supabase/supabase-js";
 import { CardApiKey } from "./card-api-key";
 import { Loader2 } from "lucide-react";
 import { useRouter } from 'next/navigation';
-import { APIKeyManager } from "../../lib/api-key-manager";
+import { APIKeyManager } from "../../backup/api-key-manager";
 
 export default function DashboardPage() {
   const [apiKey, setApiKey] = useState("");
