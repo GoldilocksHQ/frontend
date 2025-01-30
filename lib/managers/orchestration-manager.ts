@@ -89,7 +89,7 @@ export class OrchestrationManager extends Manager {
       }
 
       // Create input based on chain type
-      const input = this.createChainInput(chainConfig, content, targetAgent);
+      const input = this.createChainInput(chainConfig, content);
       if (input instanceof Error) {
         throw input;
       }
@@ -132,20 +132,13 @@ export class OrchestrationManager extends Manager {
   createChainInput(
     chainConfig: ChainConfig,
     content: string,
-    targetAgent: Agent
   ): Record<string, unknown> | Error {
     if (chainConfig.type === ChainType.CONVERSATION) {
       return { content: content };
     } else if (chainConfig.type === ChainType.TASK_PLANNING) {
-      return { content: content };
+      return { request: content };
     } else if (chainConfig.type === ChainType.TASK_EXECUTION) {
-      const availableTools = targetAgent.toolIds?.map((toolId) =>
-        this.agentManager.getTool(toolId)
-      );
-      return {
-        task: content,
-        available_tools: availableTools,
-      };
+      return { task: content };
     } else if (chainConfig.type === ChainType.JUDGEMENT) {
       const splitChars = ["\n", "?"];
       for (const char of splitChars) {

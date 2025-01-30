@@ -42,20 +42,25 @@ export function AgentConfigSidebar({
 }: AgentConfigSidebarProps) {
   const [name, setName] = useState(agent.name);
   const [description, setDescription] = useState(agent.description);
-  const [selectedTools, setSelectedTools] = useState<Set<string>>(
-    new Set(agent.toolIds || [])
-  );
   const [selectedModel, setSelectedModel] = useState<ModelConfig>(
     agentManager.getAvailableModels()[0]
   );
   const [chainType, setChainType] = useState<ChainType>(ChainType.CONVERSATION);
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(
+    new Set(agent.toolIds || [])
+  );
+  const [selectedLinkedAgents, setSelectedLinkedAgents] = useState<Set<string>>(
+    new Set(agent.linkedAgentIds || [])
+  );
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [selectedToolDefinition, setSelectedToolDefinition] =
     useState<ToolDefinition | null>(null);
+
   useEffect(() => {
     setName(agent.name);
     setDescription(agent.description);
     setSelectedTools(new Set(agent.toolIds || []));
+    setSelectedLinkedAgents(new Set(agent.linkedAgentIds || []));
 
     // Load chain config if exists
     const chain = agent.chainId
@@ -71,12 +76,21 @@ export function AgentConfigSidebar({
 
   const handleSave = async () => {
     try {
+       // Validate linked agents
+       const allAgentIds = agentManager.getAllAgents().map(a => a.id);
+       Array.from(selectedLinkedAgents).forEach(agentId => {
+         if (!allAgentIds.includes(agentId)) {
+           throw new Error(`Linked agent not found: ${agentId}`);
+         }
+       });
+
       // Create or update chain
       const newChainConfig: ChainConfig = {
         type: chainType,
         model: selectedModel,
         memory: true,
         tools: Array.from(selectedTools),
+        linkedAgents: Array.from(selectedLinkedAgents),
       };
 
       const newAgentConfig: AgentConfig = {
@@ -85,6 +99,7 @@ export function AgentConfigSidebar({
         chainType: chainType,
         modelName: selectedModel.name,
         toolIds: Array.from(selectedTools),
+        linkedAgentIds: Array.from(selectedLinkedAgents),
       };
 
       // Update agent with new chain and basic info
@@ -124,6 +139,7 @@ export function AgentConfigSidebar({
       </div>
 
       <div className="space-y-4">
+        {/* Name Section */}
         <div className="space-y-2">
           <Label>Name</Label>
           <Input
@@ -134,7 +150,7 @@ export function AgentConfigSidebar({
             }}
           />
         </div>
-
+        {/* Description Section */}
         <div className="space-y-2">
           <Label>Description</Label>
           <Textarea
@@ -145,7 +161,7 @@ export function AgentConfigSidebar({
             }}
           />
         </div>
-
+        {/* Model Selection Section */}
         <div className="space-y-2">
           <Label>Model</Label>
           <Select
@@ -172,7 +188,7 @@ export function AgentConfigSidebar({
             </SelectContent>
           </Select>
         </div>
-
+        {/* Chain Type Selection Section */}
         <div className="space-y-2">
           <Label>Chain Type</Label>
           <Select
@@ -194,7 +210,7 @@ export function AgentConfigSidebar({
             </SelectContent>
           </Select>
         </div>
-
+        {/* Tools Selection Section */}
         <div className="space-y-2">
           <Label>Tools</Label>
           <div className="space-y-1">
@@ -246,6 +262,41 @@ export function AgentConfigSidebar({
             ))}
           </div>
         </div>
+        {/* Linked Agents Selection Section */}
+        <div className="space-y-2">
+          <Label>Linked Agents</Label>
+          <div className="space-y-1">
+            {agentManager.getAllAgents()
+              .filter(a => a.id !== agent.id)
+              .map((agent) => (
+                <div
+                  key={agent.id}
+                  className={cn(
+                    "flex items-center gap-2 p-2 rounded-lg transition-colors cursor-pointer text-sm",
+                    selectedLinkedAgents.has(agent.id)
+                      ? "bg-primary/10 hover:bg-primary/15"
+                      : "hover:bg-muted"
+                  )}
+                  onClick={() => {
+                    const newAgents = new Set(selectedLinkedAgents);
+                    if (newAgents.has(agent.id)) {
+                      newAgents.delete(agent.id);
+                    } else {
+                      newAgents.add(agent.id);
+                    }
+                    setSelectedLinkedAgents(newAgents);
+                    setHasUnsavedChanges(true);
+                  }}
+                >
+                  <div className="w-5 h-5 rounded-full bg-background flex items-center justify-center text-xs">
+                    <span className="text-muted-foreground">#</span>
+                  </div>
+                  <span className="flex-1">{agent.name}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+        {/* Tool Definition Dialog */}
         <Dialog
           open={!!selectedToolDefinition}
           onOpenChange={() => setSelectedToolDefinition(null)}

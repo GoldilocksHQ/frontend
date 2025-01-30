@@ -5,6 +5,7 @@ import { ManagerStatus } from "../core/base-manager";
 export interface ToolDefinition {
   id: string;
   name: string;
+  description: string;
   functions: {
     name: string;
     description: string;

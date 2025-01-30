@@ -4,7 +4,6 @@ import { BufferMemory } from "langchain/memory";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { type AgentPlan} from "../core/thread";
 import { z } from "zod";
-import { ToolDefinition } from "../managers/tool-manager";
 
 // TASK_PLANNING_TEMPLATE
 
@@ -15,7 +14,7 @@ Given a task, you should:
 2. Break down the task into smaller, logical steps
 3. For each step:
    - Provide a clear description
-   - Identify which tools are needed from the EXACT list below (do not invent or assume tools exist)
+   - Identify which agents and tools are needed from the EXACT list below (do not invent or assume agents or tools exist)
    - Note any dependencies on other steps
    - Include reasoning for the approach
 4. Ensure the steps are ordered correctly
@@ -23,8 +22,8 @@ Given a task, you should:
 
 Task to plan: {input}
 
-Available tools:
-{tools}
+Available agents:
+{agents}
 
 IMPORTANT WARNINGS:
 - You can ONLY use tools that are listed above. Do not reference any tools that are not in the provided list.
@@ -48,21 +47,21 @@ const responseSchema = z.object({
 
 interface TaskPlannerInput {
   input: {
-    content: string;
+    request: string;
   }
 }
 
 interface TaskPlannerChainInput {
   model: ChatOpenAI;
   memory?: BufferMemory;
-  tools?: ToolDefinition[];
+  linkedAgents?: object;
 }
 
 export class TaskPlannerChain extends BaseChain {
   public id: string;
   private model: ChatOpenAI;
   public memory?: BufferMemory;
-  private tools: ToolDefinition[];
+  private linkedAgents: object;
   private prompt: PromptTemplate;
 
   constructor(input: TaskPlannerChainInput) {
@@ -70,10 +69,10 @@ export class TaskPlannerChain extends BaseChain {
     this.id = crypto.randomUUID() as string;
     this.model = input.model;
     this.memory = input.memory;
-    this.tools = input.tools || [];
+    this.linkedAgents = input.linkedAgents || [];
     this.prompt = new PromptTemplate({
       template: TASK_PLANNING_TEMPLATE,
-      inputVariables: ["input", "tools"]
+      inputVariables: ["input", "agents"]
     });
   }
 
@@ -86,20 +85,20 @@ export class TaskPlannerChain extends BaseChain {
   }
 
   get outputKeys(): string[] {
-    return ["agentMission"];
+    return ["agentPlan"];
   }
 
   async _call(values: TaskPlannerInput): Promise<{ agentPlan: AgentPlan }> {
     try {
-      // Format tools for prompt
-      const toolDescriptions = this.tools.map(tool => 
-        `- ${tool.name}\nFunctions:\n ${tool.functions.map(func => `- ${func.name}: ${func.description}`).join("\n")}`
-      ).join("\n\n");
+      // // Format tools for prompt
+      // const toolDescriptions = this.tools.map(tool => 
+      //   `- ${tool.name}\nFunctions:\n ${tool.functions.map(func => `- ${func.name}: ${func.description}`).join("\n")}`
+      // ).join("\n\n");
 
       // Generate prompt
       const prompt = await this.prompt.format({
-        input: values.input.content,
-        tools: toolDescriptions,
+        input: values.input.request,
+        agents: JSON.stringify(this.linkedAgents),
       });
 
       const modeWithStructuredOutput = this.model.withStructuredOutput(responseSchema);

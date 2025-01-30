@@ -95,6 +95,7 @@ export default function PlaygroundPage() {
         chainType: agentManager.getAvailableChainTypes()[0],
         modelName: agentManager.getAvailableModels()[0].name,
         toolIds: [],
+        linkedAgentIds: []
       });
       toast({
         title: "Success",

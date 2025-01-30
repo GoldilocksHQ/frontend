@@ -11,6 +11,7 @@ export interface AgentConfig {
   chainType: ChainType;
   modelName: string;
   toolIds: string[];
+  linkedAgentIds: string[];
 }
 
 export interface Agent {
@@ -19,6 +20,7 @@ export interface Agent {
   description: string;
   chainId: string;
   toolIds: string[];
+  linkedAgentIds: string[];
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -30,6 +32,7 @@ export type AgentJSON = {
   description: string;
   chainId: string;
   toolIds: string[];
+  linkedAgentIds: string[];
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -57,7 +60,7 @@ export class AgentManager extends Manager {
   private constructor(toolManager?: ToolManager) {
     super({ name: 'AgentManager' });
     this.errorManager = ErrorManager.getInstance();
-    this.chainManager = ChainManager.getInstance();
+    this.chainManager = ChainManager.getInstance(this.agents);
     this.toolManager = toolManager ? toolManager : ToolManager.getInstance();
   }
 
@@ -112,7 +115,8 @@ export class AgentManager extends Manager {
         type: config.chainType,
         model: model,
         memory: true,
-        tools: config.toolIds
+        tools: config.toolIds,
+        linkedAgents: config.linkedAgentIds
       });
 
 
@@ -123,6 +127,7 @@ export class AgentManager extends Manager {
         description: config.description,
         chainId: chain.id,
         toolIds: config.toolIds,
+        linkedAgentIds: config.linkedAgentIds,
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
@@ -207,8 +212,13 @@ export class AgentManager extends Manager {
       for (const toolId of agent.toolIds) {
         if (!this.toolManager.getTool(toolId)) {
           throw new Error(`Tool not found: ${toolId}`);
-    }
-  }
+    }}}
+    if (agent.linkedAgentIds?.length) {
+      for (const linkedAgentId of agent.linkedAgentIds) {
+        if (!this.agents.get(linkedAgentId)) {
+          throw new Error(`Linked agent not found: ${linkedAgentId}`);
+        }
+      }
     }
   }
 

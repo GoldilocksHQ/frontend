@@ -35,13 +35,13 @@ const responseSchema = z.object({
 interface TaskExecutorInput {
   input: {
     task: string;
-    available_tools: Array<ToolDefinition>;
   }
 }
 
 interface TaskExecutorChainInput {
   model: ChatOpenAI;
   memory?: BufferMemory;
+  tools: Array<ToolDefinition>;
 }
 
 export class TaskExecutorChain extends BaseChain {
@@ -49,12 +49,14 @@ export class TaskExecutorChain extends BaseChain {
   private model: ChatOpenAI;
   public memory?: BufferMemory;
   private prompt: PromptTemplate;
+  private tools: Array<ToolDefinition>;
 
   constructor(input: TaskExecutorChainInput) {
     super();
     this.id = crypto.randomUUID() as string;
     this.model = input.model;
     this.memory = input.memory;
+    this.tools = input.tools;
     this.prompt = new PromptTemplate({
       template: TASK_EXECUTION_TEMPLATE,
       inputVariables: ["task", "tools"]
@@ -66,7 +68,7 @@ export class TaskExecutorChain extends BaseChain {
   }
 
   get inputKeys(): string[] {
-    return ["task", "available_tools"];
+    return ["input"];
   }
 
   get outputKeys(): string[] {
@@ -76,7 +78,7 @@ export class TaskExecutorChain extends BaseChain {
   async _call(values: TaskExecutorInput): Promise<{ agentToolCall: AgentToolCall }> {
     try {
       // Format tools for prompt
-      const toolDescriptions = values.input.available_tools.map(tool => {
+      const toolDescriptions = this.tools.map(tool => {
         const functionDescriptions = tool.functions.map(func => 
           `    - ${func.name}: ${func.description}\n      Parameters: ${JSON.stringify(func.parameters, null, 2)}`
         ).join('\n');

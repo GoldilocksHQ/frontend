@@ -11,6 +11,7 @@ import { TaskPlannerChain } from "../chains/task-planner-chain";
 import { ToolDefinition, ToolManager } from "./tool-manager";
 import { useChainStore } from "../stores/chain-store";
 import { AgentJudgement, AgentPlan, AgentToolCall} from "../core/thread";
+import { Agent } from "./agent-manager";
   
 export enum ChainType {
   CONVERSATION = "conversation",
@@ -32,6 +33,7 @@ export interface ChainConfig {
   model: ModelConfig;
   memory: boolean;
   tools?: string[];
+  linkedAgents?: string[];
 }
 
 export type ModelProvider = "local" | "openai" | "anthropic";
@@ -76,18 +78,20 @@ export class ChainManager extends Manager {
   private static instance: ChainManager | null = null;
   private toolManager: ToolManager;
   private errorManager: ErrorManager;
+  private agents: Map<string, Agent>;
   private chains: Map<string, Chain>;
 
-  private constructor() {
+  private constructor(agents?: Map<string, Agent>) {
     super({ name: 'ChainManager' });
     this.toolManager = ToolManager.getInstance();
     this.errorManager = ErrorManager.getInstance();
+    this.agents = agents || new Map();
     this.chains = new Map();
   }
 
-  static getInstance(): ChainManager {
+  static getInstance(agents?: Map<string, Agent>): ChainManager {
     if (!ChainManager.instance) {
-      ChainManager.instance = new ChainManager();
+      ChainManager.instance = new ChainManager(agents);
     }
     return ChainManager.instance;
   }
@@ -135,7 +139,8 @@ export class ChainManager extends Manager {
       type: config.type,
       model: config.model,
       memory: config.memory,
-      tools: config.tools
+      tools: config.tools,
+      linkedAgents: config.linkedAgents
     };
     this.chains.set(chain.id, chain);
     useChainStore.getState().addChain(chain);
@@ -147,13 +152,15 @@ export class ChainManager extends Manager {
       const model = this.createModel(config);
       const memory = config.memory ? new BufferMemory() : undefined;
       const tools = config.tools ? config.tools.map(id => this.toolManager.getTool(id) as ToolDefinition) : [];
+      const linkedAgents = config.linkedAgents ? config.linkedAgents.map(id => this.agents.get(id)) : [];
+      const agents = this.configureLinkedAgents(linkedAgents as Agent[]);
 
       switch (config.type) {
         case ChainType.TASK_PLANNING:
-          return new TaskPlannerChain({ model, memory, tools });
+          return new TaskPlannerChain({ model, memory, linkedAgents: agents });
 
         case ChainType.TASK_EXECUTION:
-          return new TaskExecutorChain({ model, memory });
+          return new TaskExecutorChain({ model, memory, tools });
 
         case ChainType.CONVERSATION:
           return new ConversationChain({ model, memory });
@@ -169,6 +176,25 @@ export class ChainManager extends Manager {
       throw new Error(`Failed to create chain: ${error}`);
     }
   }
+
+  private configureLinkedAgents(linkedAgents: Agent[]): object {
+    return linkedAgents.map(agent => ({
+      agentId: agent?.id,
+      agentName: agent?.name,
+      agentDescription: agent?.description,
+      agentTools: agent?.toolIds?.map(id => {
+        const tool = this.toolManager.getTool(id) as ToolDefinition;
+        return {
+          toolName: tool.name,
+          toolDescription: tool.description,
+          toolFunctions: tool.functions.map(func => ({
+            name: func.name,
+            description: func.description,
+          }))
+        };
+      }) || []
+    }))
+  };
 
   private createModel(config: ChainConfig): ChatOpenAI {
     return new ChatOpenAI({
