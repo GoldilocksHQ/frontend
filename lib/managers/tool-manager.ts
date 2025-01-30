@@ -14,12 +14,16 @@ export interface ToolDefinition {
 }
 
 export interface ToolParameter {
-  name: string;
+  type: string;
+  properties: Record<string, ToolParameterProperty>;
+  required: string[];
+  schema?: Record<string, unknown>;
+}
+
+export interface ToolParameterProperty {
   type: string;
   description: string;
-  required: boolean;
-  default?: unknown;
-  schema?: Record<string, unknown>;
+  default?: string;
 }
 
 export interface ToolReturnType {
