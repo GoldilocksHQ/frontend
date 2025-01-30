@@ -253,11 +253,11 @@ export function AgentConfigSidebar({
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
             <DialogHeader>
               <DialogTitle>
-                {selectedToolDefinition?.name} Functions
+                {selectedToolDefinition && selectedToolDefinition.name.charAt(0).toUpperCase() + selectedToolDefinition.name.slice(1)} Functions
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              {selectedToolDefinition?.functions.map((func) => (
+              {selectedToolDefinition?.functions?.map((func) => (
                 <div key={func.name} className="bg-muted/50 p-4 rounded-lg">
                   <h3 className="font-semibold mb-2">{func.name}</h3>
                   <p className="text-sm text-muted-foreground mb-3">
@@ -292,7 +292,7 @@ export function AgentConfigSidebar({
                   </div>
 
                   <div className="mt-3">
-                    <h4 className="text-sm font-medium">Expected Response:</h4>
+                    <h4 className="text-sm font-medium">Response Schema:</h4>
                     <pre className="text-sm bg-background p-2 rounded mt-1">
                       {JSON.stringify(func.responseSchema, null, 2)}
                     </pre>

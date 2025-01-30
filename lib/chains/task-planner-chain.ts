@@ -32,9 +32,6 @@ IMPORTANT WARNINGS:
 - Do not try to use general tools like "pen", "paper", "browser", etc.
 - If a task cannot be completed with the available tools, state this in the reasoning.
 `;
-// Respond with a JSON object in this schema:
-// {responseSchema}
-// `;
 
 const responseSchema = z.object({
   goal: z.string().describe("The main objective of the task"),

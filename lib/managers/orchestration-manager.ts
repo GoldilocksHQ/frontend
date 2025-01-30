@@ -204,7 +204,7 @@ export class OrchestrationManager extends Manager {
         output = this.constructMessage(
           thread,
           MessageRole.ASSISTANT,
-          JSON.stringify(toolCallResult),
+          JSON.stringify(toolCallResult, null, 2),
           sourceAgent.id
         );
       } else {
@@ -224,7 +224,7 @@ export class OrchestrationManager extends Manager {
         output = this.constructMessage(
           thread,
           MessageRole.ASSISTANT,
-          JSON.stringify(plan),
+          JSON.stringify(plan, null, 2),
           sourceAgent.id
         );
       } else {
@@ -244,7 +244,7 @@ export class OrchestrationManager extends Manager {
         output = this.constructMessage(
           thread,
           MessageRole.ASSISTANT,
-          JSON.stringify(judgement),
+          JSON.stringify(judgement, null, 2),
           sourceAgent.id
         );
       } else {
@@ -257,14 +257,14 @@ export class OrchestrationManager extends Manager {
         output = this.constructMessage(
           thread,
           MessageRole.ASSISTANT,
-          JSON.stringify(result.result),
+          JSON.stringify(result.result, null, 2),
           sourceAgent.id
         );
       } else {
         output = this.constructMessage(
           thread,
           MessageRole.ASSISTANT,
-          JSON.stringify(result.result),
+          JSON.stringify(result.result, null, 2),
           sourceAgent.id,
           targetAgent?.id
         );
@@ -305,7 +305,7 @@ export class OrchestrationManager extends Manager {
       type: InteractionType.PLAN,
       goal: (result as AgentPlan).goal,
       reasoning: (result as AgentPlan).reasoning,
-      taskIds: [],
+      tasks: [],
       completedTaskIds: [],
       sourceAgentId: agentId,
       targetAgentId: agentId,
@@ -324,7 +324,7 @@ export class OrchestrationManager extends Manager {
         ),
         planId: plan.id,
       };
-      plan.taskIds.push(task.id);
+      plan.tasks.push(task);
     }
 
     return plan;

@@ -124,7 +124,7 @@ export interface Plan extends Interaction {
   type: InteractionType.PLAN;
   id: string;
   goal: string;
-  taskIds: string[];
+  tasks: Task[];
   reasoning: string;
   completedTaskIds: string[];
 }

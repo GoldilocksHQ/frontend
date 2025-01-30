@@ -12,7 +12,7 @@ import { AgentManager } from "@/lib/managers/agent-manager";
 import { ConversationManager } from "@/lib/managers/conversation-manager";
 import { useStores } from "@/lib/stores";
 import { ConnectorManager } from "@/lib/managers/connector-manager";
-import { InteractionType, Message, MessageRole } from "@/lib/core/thread";
+import { Interaction, InteractionType, Message, MessageRole } from "@/lib/core/thread";
 
 export default function PlaygroundPage() {
   const { uiState: ui, agentState: agent } = useStores();
@@ -21,6 +21,7 @@ export default function PlaygroundPage() {
   const [conversationManager, setConversationManager] = useState<ConversationManager | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [interactionHistory, setInteractionHistory] = useState<Interaction[]>([]);
 
   const { toast } = useToast();
 
@@ -41,6 +42,8 @@ export default function PlaygroundPage() {
         const conversationMgr = ConversationManager.getInstance();
         await conversationMgr.initialize();
         setConversationManager(conversationMgr);
+
+        setInteractionHistory(conversationMgr.getInteractionsByAgent(agent.selectedAgent?.id as string));
 
       } catch (error) {
         console.error("Failed to initialize managers:", error);
@@ -67,8 +70,10 @@ export default function PlaygroundPage() {
         .sort((a, b) => a.createdAt - b.createdAt) as Message[];
       
       setMessages(messageHistory);
+      setInteractionHistory(conversationManager.getInteractionsByAgent(agent.selectedAgent?.id as string));
     } else {
       setMessages([]);
+      setInteractionHistory([]);
     }
   }, [agent.selectedAgent, conversationManager]);
 
@@ -218,6 +223,7 @@ export default function PlaygroundPage() {
             <div className="flex-1 flex flex-col overflow-hidden">
               <ChatInterface
                 interfaceMessages={messages}
+                fullInteractionHistory={interactionHistory}
                 onSendMessage={handleSend}
                 isWorking={ui.isWorking}
                 workingStatus={ui.workingStatus}
