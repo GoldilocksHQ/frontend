@@ -113,6 +113,14 @@ export class ToolManager extends Manager {
   getTool(toolId: string): ToolDefinition | undefined {
     return this.tools.get(toolId);
   }
+
+  getExecutor(toolId: string): (functionName: string, params: Record<string, unknown>) => Promise<unknown> | undefined {
+    const executor = this.executors.get(toolId);
+    if (!executor) {
+      throw new Error(`Executor not found: ${toolId}`);
+    }
+    return executor;
+  }
   
   getAllAvailableTools(): ToolDefinition[] {
     return Array.from(this.tools.values());

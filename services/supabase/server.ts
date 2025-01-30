@@ -191,6 +191,51 @@ export async function updateCredentials(credentials: Credentials): Promise<{ suc
   }
 }
 
+export async function setTokenInvalid(
+  credentials: Credentials
+): Promise<{ success: boolean; error?: TokenError }> {
+  try {
+    validateCredentials(credentials);
+
+    const supabase = await createClient();
+    const { data, error } = await supabase.schema('api').rpc('invalidate_token', {
+      p_user_id: credentials.userId,
+      p_token_type: credentials.tokenType,
+      p_token_name: credentials.tokenName
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: {
+          message: error.message,
+          code: error.code
+        }
+      };
+    }
+
+    if (!data?.success) {
+      return {
+        success: false,
+        error: {
+          message: data?.error || 'Token invalidation failed',
+          code: data?.code || 'INVALIDATION_FAILED'
+        }
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        message: error instanceof Error ? error.message : 'Unknown error occurred',
+        code: 'UNEXPECTED_ERROR'
+      }
+    };
+  }
+}
+
 export async function tokenExists(credentials: Credentials): Promise<boolean> {
   const { success, credentials: updatedCredentials} = await getCredentials(credentials);
   return success && updatedCredentials !== null && updatedCredentials?.token !== null;

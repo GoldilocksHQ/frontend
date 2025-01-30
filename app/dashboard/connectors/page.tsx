@@ -10,7 +10,7 @@ import { Loader2 } from "lucide-react";
 import { UUID } from "@/lib/types";
 
 export default function ConnectorsPage() {
-  const [connectors, setConnectors] = useState<Array<Connector & { isConnected: boolean }>>([]);
+  const [connectors, setConnectors] = useState<Array<Connector & { isConnected: boolean, isAuthenticated: boolean }>>([]);
   const [selectedConnectorId, setSelectedConnectorId] = useState<UUID | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,8 @@ export default function ConnectorsPage() {
           const status = manager.getConnectorStatus(connector.id);
           return {
             ...connector,
-            isConnected: status?.isConnected || false
+            isConnected: status?.isConnected || false,
+            isAuthenticated: status?.isAuthenticated || false
           };
         })
       );
@@ -100,8 +101,8 @@ export default function ConnectorsPage() {
               <div className="mt-auto">
                 <Button
                   className="w-full"
-                  disabled={connector.isConnected || selectedConnectorId === connector.id}
-                  variant={connector.isConnected ? "secondary" : "default"}
+                  disabled={(connector.isConnected && connector.isAuthenticated) || selectedConnectorId === connector.id}
+                  variant={(connector.isConnected && connector.isAuthenticated) ? "secondary" : "default"}
                   onClick={() => handleConnect(connector)}
                 >
                   {selectedConnectorId === connector.id ? (
@@ -123,7 +124,7 @@ export default function ConnectorsPage() {
                       </svg>
                       Connecting...
                     </>
-                  ) : connector.isConnected ? (
+                  ) : connector.isConnected && connector.isAuthenticated ? (
                     "Connected"
                   ) : (
                     "Connect"

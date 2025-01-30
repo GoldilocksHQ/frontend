@@ -1,5 +1,4 @@
 import { queryDatabase } from "../supabase/server";
-import { Connector} from "../../backup/types_legacy";
 import { handleFunction as handleGoogleSheetsFunction } from "@/connectors/google-sheets/connector";
 import { handleFunction as handleGoogleDriveFunction } from "@/connectors/google-drive/connector";
 import { handleFunction as handleGoogleDocsFunction } from "@/connectors/google-docs/connector";
@@ -13,12 +12,22 @@ export interface ConnectorFunction {
   arguments: Record<string, unknown>;
 }
 
+export interface Connector {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  toolDefinitions: ToolDefinition[];
+  metadata?: Record<string, unknown>;
+  status?: string;
+}
+
 export class ConnectorService {
   async getConnectors(userId?: string): Promise<Connector[]> {
     const { success, data, error } = await queryDatabase(
       "api",      
       userId ? "activated_connectors" : "connectors",
-      userId ? "connector_id , connectors ( id, connector_name, connector_display_name, connector_description )" : "id, connector_name, connector_display_name, connector_description",
+      userId ? "connector_id , status, connectors ( id, connector_name, connector_display_name, connector_description )" : "id, connector_name, connector_display_name, connector_description",
       userId ? { user_id: userId } : {},
     );
 
@@ -30,7 +39,8 @@ export class ConnectorService {
       id: userId ? connector.connector_id : connector.id,
       name: userId ? (connector.connectors as Record<string, unknown>).connector_name : connector.connector_name,
       displayName: userId ? (connector.connectors as Record<string, unknown>).connector_display_name : connector.connector_display_name,
-      description: userId ? (connector.connectors as Record<string, unknown>).connector_description : connector.connector_description
+      description: userId ? (connector.connectors as Record<string, unknown>).connector_description : connector.connector_description,
+      ...(userId ? { status: connector.status } : {})
     })) : [];
     
     return connectors as Connector[];

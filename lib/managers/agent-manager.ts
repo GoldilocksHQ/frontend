@@ -225,6 +225,10 @@ export class AgentManager extends Manager {
     return this.toolManager.getTool(id);
   }
 
+  getToolExecutor(id: string): (functionName: string, params: Record<string, unknown>) => Promise<unknown> | undefined {
+    return this.toolManager.getExecutor(id);
+  }
+
   // Chain Management
   loadChain(chain: Omit<Chain, 'chainInstance'>): void {
     this.chainManager.loadPersistedChain(chain);

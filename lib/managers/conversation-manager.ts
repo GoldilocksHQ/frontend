@@ -8,7 +8,8 @@ import {
   Task,
   TaskStatus,
   Plan,
-  Interaction
+  Interaction,
+  AgentToolCall
 } from "../core/thread";
 import { Agent, AgentManager } from "./agent-manager";
 import { ChainManager, ChainType } from "./chain-manager";
@@ -178,8 +179,26 @@ export class ConversationManager extends Manager {
 
       // Handle chain result
       if (result.success && result.result) {
-        // If the result is a task list, record it as a plan
-        if (this.isTaskList(result.result)) {
+        if (typeof result.result === 'object' && 'execution' in result.result) {
+          // If the result is a tool call, execute it
+          const toolCallResult = await this.executeToolCall(result.result as AgentToolCall, targetAgent);
+
+          // Record the tool call result
+          const toolCallResultMessage: Message = {
+            id: crypto.randomUUID() as string,
+            threadId,
+            type: InteractionType.MESSAGE,
+            role: MessageRole.ASSISTANT,
+            content: JSON.stringify(toolCallResult),
+            sourceAgentId: targetAgent.id,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          thread.addInteraction(toolCallResultMessage);
+
+          console.log(toolCallResult);
+        } else if (this.isTaskList(result.result)) {
+          // If the result is a task list, record it as a plan
           const plan = await this.constructPlan(result.result as PlanResult, threadId, targetAgent);
           thread.addInteraction(plan);
           await this.executePlan(plan);
@@ -211,6 +230,20 @@ export class ConversationManager extends Manager {
       });
       throw error;
     }
+  }
+
+  private async executeToolCall(toolCall: AgentToolCall, agent: Agent): Promise<unknown> {
+    const availableTools = agent.toolIds?.map(toolId => this.agentManager.getTool(toolId));
+    const tool = availableTools?.find(tool => tool?.name === toolCall.execution.connectorName);
+
+    if (!tool) {
+      throw new Error(`Tool not found: ${toolCall.execution.connectorName}`);
+    }
+    const executor = this.agentManager.getToolExecutor(tool.id);
+    if (!executor) {
+      throw new Error(`Executor not found: ${tool.id}`);
+    }
+    return await executor(toolCall.execution.functionName, toolCall.execution.parameters);
   }
 
   private async constructPlan(result: PlanResult, threadId: string, agent: Agent): Promise<Plan> {

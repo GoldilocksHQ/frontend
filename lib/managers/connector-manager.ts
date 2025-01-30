@@ -13,8 +13,19 @@ export interface Connector {
   metadata?: Record<string, unknown>;
 }
 
+export interface ConnectorBackendResponse {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+  status?: string;
+}
+
+
 export interface ConnectorStatus {
   isConnected: boolean;
+  isAuthenticated: boolean;
   lastConnected?: number;
   error?: string;
   metadata?: Record<string, unknown>;
@@ -22,7 +33,6 @@ export interface ConnectorStatus {
 
 export interface ConnectorAuthResponse {
   authUrl?: string;
-  isAuthenticated: boolean;
   error?: string;
 }
 
@@ -92,6 +102,8 @@ export class ConnectorManager extends Manager {
     // Register connectors and update their status
     for (const connector of allConnectors) {
       const isActivated = activatedConnectors.some(ac => ac.id === connector.id);
+      const activated_connector = activatedConnectors.filter(ac => ac.id === connector.id)[0];
+      const isAuthenticated = activated_connector.status === "active";
       
       // Register connector
       const connectorId = connector.id as string;
@@ -101,13 +113,14 @@ export class ConnectorManager extends Manager {
         displayName: connector.name,
         description: connector.description,
         toolDefinitions: [], // Will be populated by loadToolDefinitions
-        metadata: connector.metadata
+        metadata: connector.metadata,
       });
 
       // Set initial status
       this.connectorStatus.set(connectorId, {
         isConnected: isActivated,
-        lastConnected: isActivated ? Date.now() : undefined
+        isAuthenticated: isAuthenticated,
+        lastConnected: isActivated && isAuthenticated ? Date.now() : undefined
       });
     }
 
@@ -115,7 +128,7 @@ export class ConnectorManager extends Manager {
     await this.loadToolDefinitions(activatedConnectors.map(c => c.name));
   }
 
-  private async fetchConnectorList(userId?: string): Promise<Connector[]> {
+  private async fetchConnectorList(userId?: string): Promise<ConnectorBackendResponse[]> {
     const apiKey = await this.apiKeyManager.getKey();
     let url = '/api/connectors/list';
     if (userId) {
@@ -205,7 +218,8 @@ export class ConnectorManager extends Manager {
       this.connectors.set(connectorId, fullConfig);
       this.toolMappings.set(connectorId, toolIds as string[]);
       this.connectorStatus.set(connectorId, {
-        isConnected: false
+        isConnected: false,
+        isAuthenticated: false
       });
       
       this.logger.info(`Connector registered: ${config.name} (${connectorId})`);
@@ -246,6 +260,8 @@ export class ConnectorManager extends Manager {
 
       // Execute the tool through Goldilocks API
       return await this.executeConnectorTool(connectorId, toolName, functionName, params);
+
+      // TODO: Implement connector auth flow
     };
   }
 
@@ -266,18 +282,19 @@ export class ConnectorManager extends Manager {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'x-api-key': apiKey
       },
       body: JSON.stringify({
-        toolName, // TODO: This should be the connector ID instead
-        functionName,
-        params
+        connector: connector.name,
+        function: functionName,
+        arguments: params,
+        userId: this.apiKeyManager.getUserId()
       })
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || 'Failed to execute connector tool');
+      throw new Error(error.error);
     }
 
     return await response.json();
@@ -301,25 +318,13 @@ export class ConnectorManager extends Manager {
           'x-api-key': apiKey
         },
         body: JSON.stringify({
-          connectorId,
-          connectorName: connector.name
+          connectorName: connector.name,
+          userId: this.apiKeyManager.getUserId()
         })
       });
 
       const data = await response.json();
-
-      if (response.ok) {
-        if (data.isAuthenticated) {
-          // Update connector status if authentication is successful
-          this.connectorStatus.set(connectorId, {
-            isConnected: true,
-            lastConnected: Date.now()
-          });
-        }
-        return data;
-      } else {
-        throw new Error(data.message || 'Failed to authenticate connector');
-      }
+      return { authUrl: data.url };
     } catch (error) {
       this.errorManager.logError(error as Error, {
         source: this.name,
@@ -329,57 +334,13 @@ export class ConnectorManager extends Manager {
       
       this.connectorStatus.set(connectorId, {
         isConnected: false,
+        isAuthenticated: false,
         error: error instanceof Error ? error.message : String(error)
       });
       
       return {
-        isAuthenticated: false,
         error: error instanceof Error ? error.message : String(error)
       };
-    }
-  }
-
-  async handleAuthCallback(connectorId: string, code: string): Promise<void> {
-    try {
-      const connector = this.connectors.get(connectorId);
-      if (!connector) {
-        throw new Error(`Connector not found: ${connectorId}`);
-      }
-
-      const apiKey = await this.apiKeyManager.getKey();
-
-      // Complete OAuth flow through Goldilocks API
-      const response = await fetch('/api/connectors/auth/callback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          connectorId,
-          code
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to complete authentication');
-      }
-
-      // Update connector status
-      this.connectorStatus.set(connectorId, {
-        isConnected: true,
-        lastConnected: Date.now()
-      });
-
-      this.logger.info(`Connector authenticated: ${connector.name} (${connectorId})`);
-    } catch (error) {
-      this.errorManager.logError(error as Error, {
-        source: this.name,
-        severity: ErrorSeverity.HIGH,
-        metadata: { connectorId }
-      });
-      throw error;
     }
   }
 
@@ -397,7 +358,7 @@ export class ConnectorManager extends Manager {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'x-api-key': apiKey
         },
         body: JSON.stringify({
           connectorId
@@ -411,7 +372,8 @@ export class ConnectorManager extends Manager {
 
       // Update connector status
       this.connectorStatus.set(connectorId, {
-        isConnected: false
+        isConnected: false,
+        isAuthenticated: false
       });
 
       this.logger.info(`Connector disconnected: ${connector.name} (${connectorId})`);

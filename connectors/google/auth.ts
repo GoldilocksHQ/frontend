@@ -1,6 +1,6 @@
 
 import { type Credentials as GoogleCredentials, OAuth2Client } from 'google-auth-library';
-import { storeCredentials, getCredentials, type Credentials as SupabaseCredentials, tokenExists, updateCredentials } from '../../services/supabase/server';
+import { storeCredentials, getCredentials, type Credentials as SupabaseCredentials, tokenExists, updateCredentials, setTokenInvalid } from '../../services/supabase/server';
 import { isTokenExpired } from '@/lib/utils';
 import { UUID } from 'crypto';
 
@@ -14,7 +14,7 @@ const GOOGLE_CONFIG = {
 const SCOPES = {
   "google-drive": ['https://www.googleapis.com/auth/drive'],
   "google-sheets": ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
-  "google-docs": ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive'],
+  "google-docs": ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/documents'],
 }
 
 export async function constructCredentials(userId: UUID, tokenName: string, tokenType: string, token?: string, createdAt?: string, expiresAt?: string): Promise<SupabaseCredentials> {
@@ -57,12 +57,26 @@ export async function exchangeCodeForTokens(code: string): Promise<GoogleCredent
 
 // Implement a function to refresh the tokens
 export async function refreshTokens(refreshToken: string): Promise<{success: boolean, credentials: GoogleCredentials | null, error: string}> {
-  const oauth2Client = await createOAuth2Client();
-  oauth2Client.setCredentials({
-    refresh_token: refreshToken
-  });
-  const { credentials: newTokens } = await oauth2Client.refreshAccessToken();
-  return {success: true, credentials: newTokens, error: ""};
+  try {
+    const oauth2Client = await createOAuth2Client();
+    oauth2Client.setCredentials({
+      refresh_token: refreshToken
+    });
+    const { credentials: newTokens } = await oauth2Client.refreshAccessToken();
+
+    if (!newTokens?.access_token){
+      throw new Error("No access token received in refresh response");
+    }
+    
+    return {success: true, credentials: newTokens, error: ""};
+  } catch (error) {
+    console.error('Error refreshing tokens:', error);
+    return {
+      success: false, 
+      credentials: null, 
+      error: error instanceof Error ? error.message : "Unknown error during token refresh"
+    };
+  }
 }
 
 export async function storeGoogleTokens(tokens: GoogleCredentials, userId: UUID, connectorName: string): Promise<{success: boolean, error: string}> {
@@ -77,6 +91,8 @@ export async function storeGoogleTokens(tokens: GoogleCredentials, userId: UUID,
     const refreshCredentials = await constructCredentials(
       userId, connectorName, 'refresh', refreshToken, new Date().toISOString());
 
+
+    // Store tokens. If they don't exist in database, create secret token
     const {success: accessSuccess, error: accessError} = 
       await tokenExists(accessCredentials) ? 
       await updateCredentials(accessCredentials) : 
@@ -100,24 +116,28 @@ export async function storeGoogleTokens(tokens: GoogleCredentials, userId: UUID,
 }
 
 export async function retrieveCredentials(userId: UUID, tokenName: string): Promise<{success: boolean, credentials: GoogleCredentials | null, error?: string}> {
-  const accessCredentials = constructCredentials(userId, tokenName, 'access');
-  const { success: accessSuccess, credentials: updatedAccessCredentials, error: accessError } = await getCredentials(await accessCredentials);
+  const accessCredentials = await constructCredentials(userId, tokenName, 'access');
+  const { success: accessSuccess, credentials: updatedAccessCredentials, error: accessError } = await getCredentials(accessCredentials);
   if (!accessSuccess || !updatedAccessCredentials) {
     return {success: false, credentials: null, error: accessError || "No valid credentials. User must authorize first."};
   }
-  // return {success: true, credentials: updatedAccessCredentials, error: ""};
 
-  const refreshCredentials = constructCredentials(userId, tokenName, 'refresh');
-  const { success: refreshSuccess, credentials: updatedRefreshCredentials, error: refreshError } = await getCredentials(await refreshCredentials);
-
+  const refreshCredentials = await constructCredentials(userId, tokenName, 'refresh');
+  const { success: refreshSuccess, credentials: updatedRefreshCredentials, error: refreshError } = await getCredentials(refreshCredentials);
   if (!refreshSuccess || !updatedRefreshCredentials) {
-    throw new Error(refreshError || "No valid credentials. User must authorize first.");
+    return {success: false, credentials: null, error: refreshError || "No valid credentials. User must authorize first."};
   }
 
   if (isTokenExpired(updatedAccessCredentials.expiresAt)) {
     const {success: refreshSuccess, credentials: newTokens, error: refreshError} = await refreshTokens(updatedRefreshCredentials.token);
-    if (refreshSuccess) storeGoogleTokens(newTokens!, userId, tokenName);
-    return {success: refreshSuccess, credentials: newTokens, error: refreshError};
+    if (refreshSuccess) {
+      storeGoogleTokens(newTokens!, userId, tokenName);
+      return {success: refreshSuccess, credentials: newTokens, error: refreshError};
+    } else {
+      await setTokenInvalid(accessCredentials);
+      await setTokenInvalid(refreshCredentials);
+      return {success: refreshSuccess, credentials: null, error: refreshError || "No valid credentials. User must authorize first."};
+    }
   }
 
   return {success: true, credentials: {access_token: updatedAccessCredentials.token, refresh_token: updatedRefreshCredentials.token}, error: ""};

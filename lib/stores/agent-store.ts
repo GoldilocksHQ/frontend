@@ -7,7 +7,6 @@ import { customStorage, logMiddleware } from './middleware'
 import { StateCreator } from 'zustand'
 
 export interface AgentState {
-  _hasHydrated: boolean
   agents: Agent[]
   selectedAgent: Agent | null
   linkedAgents: Map<UUID, Agent[]>
@@ -24,7 +23,6 @@ export interface AgentState {
 }
 
 export const createAgentStore: StateCreator<AgentState, [], [["zustand/persist", unknown]]> = (set) => ({
-  _hasHydrated: false,
   agents: [],
   selectedAgent: null,
   linkedAgents: new Map(),

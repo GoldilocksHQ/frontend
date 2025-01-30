@@ -29,6 +29,13 @@ export const POST = withApiAuth(async (req: NextRequest) => {
     );
 
     if (!success) {
+      if (error?.includes('invalid_grant')){
+        return NextResponse.json(
+          { error: 'REAUTH_REQUIRED' },
+          { status: 401 }
+        );
+      }
+
       return NextResponse.json(
         { error: error || 'Function execution failed' },
         { status: 500 }
