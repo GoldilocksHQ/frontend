@@ -1,15 +1,5 @@
 import { useThreadStore } from "../stores/thread-store";
 
-/**
- * Common fields for all interactions in a thread
- */
-export interface BaseEntity {
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  metadata?: Record<string, unknown>;
-}
-
 export enum MessageRole {
   USER = 'user',
   ASSISTANT = 'assistant',
@@ -20,7 +10,8 @@ export enum InteractionType {
   MESSAGE = 'message',
   TASK = 'task',
   PLAN = 'plan',
-  JUDGEMENT = 'judgement'
+  JUDGEMENT = 'judgement',
+  TOOL_CALL = 'tool_call'
 }
 
 export enum TaskStatus {
@@ -75,6 +66,16 @@ export interface AgentJudgement {
 }
 
 /**
+ * Common fields for all interactions in a thread
+ */
+export interface BaseEntity {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Base interface for all interactions in a thread
  */
 export interface Interaction extends BaseEntity {
@@ -103,6 +104,17 @@ export interface Task extends Interaction {
   planId?: string;
   dependencies?: string[];
   result?: unknown;
+}
+
+/**
+ * Represents a tool call interaction
+ */
+export interface ToolCall extends Interaction {
+  type: InteractionType.TOOL_CALL;
+  toolName: string;
+  functionName: string;
+  parameters: Record<string, unknown>;
+  result: unknown;
 }
 
 /**
@@ -250,4 +262,13 @@ export class Thread extends ThreadEntity {
     this.update(update.metadata);
     useThreadStore.getState().updateThread(this.id, this);
   }
+
+  createBaseEntity(): BaseEntity {
+    return {
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      metadata: {}
+    };
+  } 
 } 

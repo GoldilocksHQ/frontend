@@ -29,7 +29,7 @@ const responseSchema = z.object({
     connectorName: z.string().describe("Name of the connector to use"),
     functionName: z.string().describe("Name of the function to call"),
     parameters: z.record(z.any()).describe("Parameters that match the function's parameter schema"),
-  }).describe("If a tool is required, provide the execution plan here. If no tool is required, leave all parameters empty.")
+  }).describe("If a tool is required, provide the execution plan here. If no tool is required, insert blank inputs for all parameters.")
 });
 
 interface TaskExecutorInput {

@@ -43,7 +43,7 @@ const items = [
 
 export function AppSidebar() {
   return (
-    <Sidebar collapsible="none" className="h-screen border-r p-4 pt-4">
+    <Sidebar collapsible="none" className="h-screen border-r p-4 pt-4 shrink-0 max-w-[15rem]">
       <SidebarHeader>
         <h2 className="text-xl font-semibold">Goldilocks</h2>
       </SidebarHeader>

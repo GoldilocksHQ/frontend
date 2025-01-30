@@ -1,4 +1,15 @@
-import { ManagerStatus, ManagerConfig } from "../types";
+// Manager base types
+export enum ManagerStatus {
+  UNINITIALIZED = "uninitialized",
+  INITIALIZING = "initializing",
+  READY = "ready",
+  ERROR = "error"
+}
+
+export interface ManagerConfig {
+  name: string;
+  logger?: Console;
+}
 
 export abstract class Manager {
   protected name: string;

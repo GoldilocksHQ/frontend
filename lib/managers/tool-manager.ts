@@ -1,6 +1,6 @@
 import { Manager } from "../core/base-manager";
 import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { ManagerStatus } from "../types";
+import { ManagerStatus } from "../core/base-manager";
 
 export interface ToolDefinition {
   id: string;

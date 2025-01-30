@@ -7,11 +7,10 @@ import Image from "next/image";
 import { Connector, ConnectorManager } from "@/lib/managers/connector-manager";
 import path from "path";
 import { Loader2 } from "lucide-react";
-import { UUID } from "@/lib/types";
 
 export default function ConnectorsPage() {
   const [connectors, setConnectors] = useState<Array<Connector & { isConnected: boolean, isAuthenticated: boolean }>>([]);
-  const [selectedConnectorId, setSelectedConnectorId] = useState<UUID | null>(null);
+  const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const logoPath = path.join("../../", "logos");

@@ -1,6 +1,6 @@
 import { Manager } from "../core/base-manager";
 import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { ManagerStatus } from "../types";
+import { ManagerStatus } from "../core/base-manager";
 import { BaseChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { BufferMemory } from "langchain/memory";
@@ -13,9 +13,9 @@ import { useChainStore } from "../stores/chain-store";
 import { AgentJudgement, AgentPlan, AgentToolCall} from "../core/thread";
   
 export enum ChainType {
+  CONVERSATION = "conversation",
   TASK_PLANNING = "task_planning",
   TASK_EXECUTION = "task_execution",
-  CONVERSATION = "conversation",
   JUDGEMENT = "judgement"
 }
 
@@ -58,13 +58,6 @@ export interface ChainExecutionResult {
   timestamp: number;
   executionTime: number;
   chainId: string;
-}
-
-export interface ChainResponse {
-  conversationResponse?: string;
-  agentPlan?: AgentPlan;
-  agentToolCall?: AgentToolCall;
-  agentJudgement?: AgentJudgement;
 }
 
 /**
@@ -214,7 +207,7 @@ export class ChainManager extends Manager {
       }
 
       // Execute the chain and handle response based on chain type
-      const result = await chain.chainInstance.invoke({input}) as ChainResponse;
+      const result = await chain.chainInstance.invoke({input});
       let response: string | AgentPlan | AgentJudgement | AgentToolCall;
 
       switch (chain.type) {

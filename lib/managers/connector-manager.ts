@@ -2,7 +2,7 @@ import { Manager } from "../core/base-manager";
 import { ErrorManager, ErrorSeverity } from "./error-manager";
 import { APIKeyManager } from "./api-key-manager";
 import { ToolManager, ToolDefinition } from "./tool-manager";
-import { ManagerStatus } from "../types";
+import { ManagerStatus } from "../core/base-manager";
 
 export interface Connector {
   id: string;

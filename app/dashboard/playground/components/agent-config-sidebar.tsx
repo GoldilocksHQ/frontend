@@ -68,7 +68,7 @@ export function AgentConfigSidebar({ agent, errors, agentManager }: AgentConfigS
   };
 
   return (
-    <div className="w-96 border-l p-6 space-y-6 overflow-auto">
+    <div className="w-96 border-l p-6 space-y-6 overflow-auto max-w-[20rem]">
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Configuration</h3>

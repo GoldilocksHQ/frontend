@@ -1,6 +1,6 @@
 import { Manager } from "../core/base-manager";
 import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { ManagerStatus } from "../types";
+import { ManagerStatus } from "../core/base-manager";
 import { generateKey, getKey } from '@/services/supabase/client';
 import { getUser } from '@/services/supabase/client';
 

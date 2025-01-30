@@ -172,8 +172,8 @@ export default function PlaygroundPage() {
   }
 
   return (
-    <div className="flex h-screen">
-      <div className="w-80 p-4 border-r flex flex-col gap-4">
+    <div className="flex h-screen overflow-hidden max-w-[calc(100vw-15rem)]">
+      <div className="w-80 p-4 border-r flex flex-col gap-4 overflow-hidden max-w-[15rem]">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Agents</h2>
           <Button
@@ -212,10 +212,10 @@ export default function PlaygroundPage() {
         </LoadingWrapper>
       </div>
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden  max-w-[calc(100vw-15rem)]">
         {agent.selectedAgent ? (
           <>
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col overflow-hidden">
               <ChatInterface
                 interfaceMessages={messages}
                 onSendMessage={handleSend}

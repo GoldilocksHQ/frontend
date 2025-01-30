@@ -1,6 +1,6 @@
 import { Manager } from "../core/base-manager";
 import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { ManagerStatus } from "../types";
+import { ManagerStatus } from "../core/base-manager";
 import { ChainManager, ChainConfig, ChainType, ModelConfig, Chain } from "./chain-manager";
 import { ToolDefinition, ToolManager } from "./tool-manager";
 import { useAgentStore } from "../stores/agent-store";

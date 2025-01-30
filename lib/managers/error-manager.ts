@@ -1,6 +1,6 @@
 import { UUID } from "crypto";
 import { Manager } from "../core/base-manager";
-import { ManagerStatus } from "../types";
+import { ManagerStatus } from "../core/base-manager";
 
 export interface ErrorContext {
   timestamp: number;
