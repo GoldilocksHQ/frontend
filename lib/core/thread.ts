@@ -102,6 +102,7 @@ export interface Task extends Interaction {
   instruction: string;
   status: TaskStatus;
   planId?: string;
+  step?: number;
   dependencies?: string[];
   result?: unknown;
 }

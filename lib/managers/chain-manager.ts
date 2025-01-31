@@ -315,7 +315,8 @@ export class ChainManager extends Manager {
         type: newChainConfig.type,
         model: newChainConfig.model,
         memory: newChainConfig.memory,
-        tools: newChainConfig.tools
+        tools: newChainConfig.tools,
+        linkedAgents: newChainConfig.linkedAgents
       }
       this.chains.set(chainId, updatedChain);
       useChainStore.getState().updateChain(updatedChain);

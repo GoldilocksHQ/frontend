@@ -64,13 +64,12 @@ export class OrchestrationManager extends Manager {
   ): Promise<void> {
     try {
       // Record user message
-      const userMessage = this.constructMessage(
+      this.constructMessage(
         thread,
         MessageRole.USER,
         content,
         initiatingAgentId
       );
-      thread.addInteraction(userMessage);
 
       // Get target agent
       const targetAgent = this.agentManager.getAgent(initiatingAgentId);
@@ -108,7 +107,13 @@ export class OrchestrationManager extends Manager {
           true,
           targetAgent
         );
-        thread.addInteraction(output);
+
+        // If the output is a plan, execute it
+        if (output.type === InteractionType.PLAN) {
+          const plan = output as Plan;
+          await this.executePlan(plan, thread);
+        }
+
       } else {
         thread.updateStatus(ThreadStatus.FAILED, result.error);
       }
@@ -184,13 +189,12 @@ export class OrchestrationManager extends Manager {
         agentToolCall,
         sourceAgent.id
       );
-      const toolCall = this.constructToolCallInteraction(
+      this.constructToolCallInteraction(
         thread,
         agentToolCall,
         toolCallResult,
         sourceAgent.id
       );
-      thread.addInteraction(toolCall);
 
       // Record the tool call result
       if (toUser) {
@@ -211,18 +215,17 @@ export class OrchestrationManager extends Manager {
         result.result as AgentPlan,
         sourceAgent.id
       );
-      thread.addInteraction(plan);
 
-      if (toUser) {
-        output = this.constructMessage(
-          thread,
-          MessageRole.ASSISTANT,
-          JSON.stringify(plan, null, 2),
-          sourceAgent.id
-        );
-      } else {
+      // if (toUser) {
+      //   output = this.constructMessage(
+      //     thread,
+      //     MessageRole.ASSISTANT,
+      //     JSON.stringify(plan, null, 2),
+      //     sourceAgent.id
+      //   );
+      // } else {
         output = plan;
-      }
+      // }
       return output as Interaction;
     } else if (resultType === InteractionType.JUDGEMENT) {
       // If the result is a judgement, record it as a judgement
@@ -231,7 +234,6 @@ export class OrchestrationManager extends Manager {
         result.result as AgentJudgement,
         sourceAgent.id
       );
-      thread.addInteraction(judgement);
 
       if (toUser) {
         output = this.constructMessage(
@@ -316,56 +318,77 @@ export class OrchestrationManager extends Manager {
           String(id)
         ),
         planId: plan.id,
+        step: taskInfo.step,
       };
       plan.tasks.push(task);
     }
 
+    thread.addInteraction(plan);
     return plan;
   }
 
-  // private async executePlan(plan: Plan): Promise<void> {
-  //   // Record each task from the plan
-  //   for (const taskId of plan.taskIds) {
-  //     const task = this.threads.get(plan.threadId)?.getInteraction(taskId) as Task;
-  //     if (!task) {
-  //       throw new Error(`Task not found: ${taskId}`);
-  //     }
-  //     task.status = TaskStatus.IN_PROGRESS;
+  private async executePlan(plan: Plan, thread: Thread): Promise<void> {
+    // TODO: Insert Task in thread and update thread, create status for plan
 
-  //     if (!task.targetAgentId) {
-  //       throw new Error('No target agent ID assigned to task');
-  //     }
+    let previousTasks = "";
+    for (const task of plan.tasks) {
+      task.status = TaskStatus.IN_PROGRESS;
 
-  //     const agent = this.agentManager.getAgent(task.targetAgentId);
-  //     if (!agent) {
-  //       throw new Error('No agent assigned to task');
-  //     }
+      if (!task.targetAgentId) {
+        throw new Error('No target agent ID assigned to task');
+      }
 
-  //     // Get agent's chain
-  //     if (!agent.chainId) {
-  //       throw new Error('No chain ID assigned to agent');
-  //     }
+      const agent = this.agentManager.getAgent(task.targetAgentId);
+      if (!agent) {
+        throw new Error('No agent assigned to task');
+      }
 
-  //     const chainConfig = this.chainManager.getChain(agent.chainId);
-  //     if (!chainConfig) {
-  //       throw new Error('Chain not found');
-  //     }
+      // Get agent's chain
+      if (!agent.chainId) {
+        throw new Error('No chain ID assigned to agent');
+      }
 
-  //     // Execute chain
-  //     const result = await this.chainManager.executeChain(agent.chainId, {
-  //       message: task.instruction,
-  //       thread_history: this.threads.get(plan.threadId)?.messages
-  //     });
+      const chainConfig = this.chainManager.getChain(agent.chainId);
+      if (!chainConfig) {
+        throw new Error('Chain not found');
+      }
 
-  //     if (result.success && result.result) {
-  //       task.status = TaskStatus.COMPLETED;
-  //       task.result = result.result;
-  //     } else {
-  //       task.status = TaskStatus.FAILED;
-  //       task.result = result.error;
-  //     }
-  //   }
-  // }
+      const taskMessage = 
+      `Overall Goal: ${plan.goal}\n\n`+
+      `${task.step && task.step > 1 ? `Previous Tasks: \n${previousTasks}\n` : ""}\n`+
+      `Current Task: ${task.instruction}`;
+
+      // Execute chain
+      const result = await this.chainManager.executeChain(agent.chainId, {
+        task: taskMessage,
+        // thread_history: this.threads.get(plan.threadId)?.messages
+      });
+
+      if (result.success && result.result) {
+        await this.handleChainResult(
+          result,
+          thread,
+          false,
+          agent
+        );
+
+        task.status = TaskStatus.COMPLETED;
+        task.result = result.result;
+        previousTasks += `\nCompleted Task ${task.step}: ${task.instruction} - Output: ${result.result}\n`;
+      } else {
+        task.status = TaskStatus.FAILED;
+        task.result = result.error;
+      }
+      
+      // Update the thread with the completed task
+      this.constructMessage(
+        thread,
+        MessageRole.ASSISTANT,
+        JSON.stringify(previousTasks, null, 2),
+        agent.id
+      );
+    }
+  }
 
   private async executeToolCall(
     toolCall: AgentToolCall,
@@ -401,7 +424,7 @@ export class OrchestrationManager extends Manager {
     toolCallResult: unknown,
     agentId: string
   ): ToolCall {
-    return {
+    const toolCallInteraction: ToolCall = {
       ...thread.createBaseEntity(),
       threadId: thread.id,
       type: InteractionType.TOOL_CALL,
@@ -412,6 +435,8 @@ export class OrchestrationManager extends Manager {
       sourceAgentId: agentId,
       targetAgentId: agentId,
     };
+    thread.addInteraction(toolCallInteraction);
+    return toolCallInteraction;
   }
 
   constructJudgement(
@@ -419,7 +444,7 @@ export class OrchestrationManager extends Manager {
     result: AgentJudgement,
     agentId: string
   ): Judgement {
-    return {
+    const judgementInteraction: Judgement = {
       ...thread.createBaseEntity(),
       threadId: thread.id,
       type: InteractionType.JUDGEMENT,
@@ -430,6 +455,8 @@ export class OrchestrationManager extends Manager {
       sourceAgentId: agentId,
       targetAgentId: agentId,
     };
+    thread.addInteraction(judgementInteraction);
+    return judgementInteraction;
   }
 
   // Utility functions for storing messages
@@ -440,7 +467,7 @@ export class OrchestrationManager extends Manager {
     targetAgentId?: string,
     sourceAgentId?: string
   ): Message {
-    return {
+    const messageInteraction: Message = {
       ...thread.createBaseEntity(),
       threadId: thread.id,
       type: InteractionType.MESSAGE,
@@ -449,5 +476,7 @@ export class OrchestrationManager extends Manager {
       targetAgentId: targetAgentId,
       sourceAgentId: sourceAgentId,
     };
+    thread.addInteraction(messageInteraction);
+    return messageInteraction;
   }
 }

@@ -30,6 +30,11 @@ export default function PlaygroundPage() {
     const initializeManagers = async () => {
       try {
         ui.setLoading(true);
+
+        // Reset working state on mount
+        ui.setWorking(false);
+        ui.setWorkingStatus("");
+
         // Initialize managers
         const connectorMgr = ConnectorManager.getInstance();
         await connectorMgr.initialize();
@@ -43,7 +48,7 @@ export default function PlaygroundPage() {
         await conversationMgr.initialize();
         setConversationManager(conversationMgr);
 
-        setInteractionHistory(conversationMgr.getInteractionsByAgent(agent.selectedAgent?.id as string));
+        // setInteractionHistory(conversationMgr.getInteractionsByAgent(agent.selectedAgent?.id as string));
 
       } catch (error) {
         console.error("Failed to initialize managers:", error);
@@ -66,11 +71,16 @@ export default function PlaygroundPage() {
       // Get all messages for this agent
       const agentInteractions = conversationManager.getInteractionsByAgent(agent.selectedAgent.id);
       const messageHistory = agentInteractions
-        .filter(interaction => interaction.type === InteractionType.MESSAGE)
+        .filter(interaction => interaction.type === InteractionType.MESSAGE &&
+          (interaction as Message).content !== ""
+        )
         .sort((a, b) => a.createdAt - b.createdAt) as Message[];
       
+      const agentThreads = conversationManager.getThreadsByAgent(agent.selectedAgent?.id as string);
+      const agentThreadsInteractions = agentThreads.flatMap(thread => thread.interactions).sort((a, b) => a.createdAt - b.createdAt);
+        
       setMessages(messageHistory);
-      setInteractionHistory(conversationManager.getInteractionsByAgent(agent.selectedAgent?.id as string));
+      setInteractionHistory(agentThreadsInteractions);
     } else {
       setMessages([]);
       setInteractionHistory([]);

@@ -212,7 +212,9 @@ export class AgentManager extends Manager {
       for (const toolId of agent.toolIds) {
         if (!this.toolManager.getTool(toolId)) {
           throw new Error(`Tool not found: ${toolId}`);
-    }}}
+        }
+      }
+    }
     if (agent.linkedAgentIds?.length) {
       for (const linkedAgentId of agent.linkedAgentIds) {
         if (!this.agents.get(linkedAgentId)) {

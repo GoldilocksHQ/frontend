@@ -2,14 +2,13 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Agent, AgentJSON } from '../managers/agent-manager'
 import { models, ModelConfig } from '../managers/chain-manager'
-import { UUID } from '../types'
 import { customStorage, logMiddleware } from './middleware'
 import { StateCreator } from 'zustand'
 
 export interface AgentState {
   agents: Agent[]
   selectedAgent: Agent | null
-  linkedAgents: Map<UUID, Agent[]>
+  linkedAgents: Map<string, Agent[]>
   selectedModel: ModelConfig
   
   // Actions
@@ -17,8 +16,8 @@ export interface AgentState {
   setSelectedAgent: (agent: Agent | null) => void
   addAgent: (agent: Agent) => void
   updateAgent: (agent: Agent) => void
-  removeAgent: (agentId: UUID) => void
-  setLinkedAgents: (agentId: UUID, linkedAgents: Agent[]) => void
+  removeAgent: (agentId: string) => void
+  setLinkedAgents: (agentId: string, linkedAgents: Agent[]) => void
   setSelectedModel: (model: ModelConfig) => void
 }
 
@@ -37,10 +36,10 @@ export const createAgentStore: StateCreator<AgentState, [], [["zustand/persist",
   updateAgent: (agent: Agent) => set((state) => ({
     agents: state.agents.map(a => a.id === agent.id ? agent : a)
   })),
-  removeAgent: (agentId: UUID) => set((state) => ({
+  removeAgent: (agentId: string) => set((state) => ({
     agents: state.agents.filter(a => a.id !== agentId)
   })),
-  setLinkedAgents: (agentId: UUID, linkedAgents: Agent[]) => set((state) => ({
+  setLinkedAgents: (agentId: string, linkedAgents: Agent[]) => set((state) => ({
     linkedAgents: new Map(state.linkedAgents).set(agentId, linkedAgents)
   })),
   setSelectedModel: (model: ModelConfig) => set({ selectedModel: model })
