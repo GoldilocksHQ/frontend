@@ -146,10 +146,6 @@ export class AgentManager extends Manager {
     }
   }
 
-  fromJSON(agent: AgentJSON): Agent {
-    return agent as Agent;
-  }
-
   getAgent(id: string): Agent | undefined {
     return this.agents.get(id);
   }
@@ -242,10 +238,6 @@ export class AgentManager extends Manager {
   }
 
   // Chain Management
-  loadChain(chain: Omit<Chain, 'chainInstance'>): void {
-    this.chainManager.loadPersistedChain(chain);
-  }
-
   getChains(): Chain[] {
     return this.chainManager.getChains();
   }

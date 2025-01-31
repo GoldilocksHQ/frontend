@@ -168,6 +168,7 @@ export class OrchestrationManager extends Manager {
    * Handle tool call, The agent that is responding is considered the source agent this point forward.
    * If the agent is responding to a user, the target agent should be left undefined.
    * If the agent is responding to another agent, the target agent should be the agent the responding agent is replying to.
+   * If to User is false, both the source and target agent needs to be set.
    */
   private async handleChainResult(
     result: ChainExecutionResult,
@@ -182,93 +183,134 @@ export class OrchestrationManager extends Manager {
     }
 
     let output: unknown;
-    if (resultType === InteractionType.TOOL_CALL) {
-      // If the result is a tool call, execute the tool call then store the result
-      const agentToolCall = result.result as AgentToolCall;
-      const toolCallResult = await this.executeToolCall(
-        agentToolCall,
-        sourceAgent.id
-      );
-      this.constructToolCallInteraction(
-        thread,
-        agentToolCall,
-        toolCallResult,
-        sourceAgent.id
-      );
+    const formattedResult = typeof result.result === 'string' ? 
+      this.formatInteractionContent(result.result) : 
+      JSON.stringify(result.result, null, 2);
 
-      // Record the tool call result
-      if (toUser) {
-        output = this.constructMessage(
+    switch (resultType) {
+      case InteractionType.TOOL_CALL:
+        const agentToolCall = result.result as AgentToolCall;
+        const toolCallResult = await this.executeToolCall(agentToolCall, sourceAgent.id);
+        const formattedToolCall = JSON.stringify(toolCallResult, null, 2);
+        
+        this.constructToolCallInteraction(thread, agentToolCall, toolCallResult, sourceAgent.id);
+        
+        output = toUser ? 
+          this.constructMessage(thread, MessageRole.ASSISTANT, formattedToolCall, sourceAgent.id) :
+          toolCallResult;
+        break;
+  
+      case InteractionType.PLAN:
+        output = this.constructPlan(thread, result.result as AgentPlan, sourceAgent.id);
+        break;
+  
+      case InteractionType.JUDGEMENT:
+        const judgement = this.constructJudgement(
           thread,
-          MessageRole.ASSISTANT,
-          JSON.stringify(toolCallResult, null, 2),
+          result.result as AgentJudgement,
           sourceAgent.id
         );
-      } else {
-        output = toolCallResult;
-      }
-      return output as Interaction;
-    } else if (resultType === InteractionType.PLAN) {
-      // If the result is a task list, record it as a plan
-      const plan = this.constructPlan(
-        thread,
-        result.result as AgentPlan,
-        sourceAgent.id
-      );
-
-      // if (toUser) {
-      //   output = this.constructMessage(
-      //     thread,
-      //     MessageRole.ASSISTANT,
-      //     JSON.stringify(plan, null, 2),
-      //     sourceAgent.id
-      //   );
-      // } else {
-        output = plan;
-      // }
-      return output as Interaction;
-    } else if (resultType === InteractionType.JUDGEMENT) {
-      // If the result is a judgement, record it as a judgement
-      const judgement = this.constructJudgement(
-        thread,
-        result.result as AgentJudgement,
-        sourceAgent.id
-      );
-
-      if (toUser) {
+        
+        output = toUser ?
+          this.constructMessage(thread, MessageRole.ASSISTANT, JSON.stringify(judgement, null, 2), sourceAgent.id) :
+          judgement;
+        break;
+  
+      case InteractionType.MESSAGE:
         output = this.constructMessage(
           thread,
           MessageRole.ASSISTANT,
-          JSON.stringify(judgement, null, 2),
-          sourceAgent.id
-        );
-      } else {
-        output = judgement;
-      }
-      return output as Interaction;
-    } else if (resultType === InteractionType.MESSAGE) {
-      // Record the agent message
-      if (toUser) {
-        output = this.constructMessage(
-          thread,
-          MessageRole.ASSISTANT,
-          JSON.stringify(result.result, null, 2),
-          sourceAgent.id
-        );
-      } else {
-        output = this.constructMessage(
-          thread,
-          MessageRole.ASSISTANT,
-          JSON.stringify(result.result, null, 2),
+          formattedResult,
           sourceAgent.id,
-          targetAgent?.id
+          toUser ? undefined : targetAgent?.id
         );
-      }
-      return output as Interaction;
-    } else {
-      throw new Error("Invalid chain result");
+        break;
+  
+      default:
+        throw new Error("Invalid chain result");
     }
+  
+    return output as Interaction;
   }
+
+    // if (resultType === InteractionType.TOOL_CALL) {
+    //   // If the result is a tool call, execute the tool call then store the result
+    //   const agentToolCall = result.result as AgentToolCall;
+    //   const toolCallResult = await this.executeToolCall(
+    //     agentToolCall,
+    //     sourceAgent.id
+    //   );
+    //   this.constructToolCallInteraction(
+    //     thread,
+    //     agentToolCall,
+    //     toolCallResult,
+    //     sourceAgent.id
+    //   );
+
+    //   // Record the tool call result
+    //   if (toUser) {
+    //     output = this.constructMessage(
+    //       thread,
+    //       MessageRole.ASSISTANT,
+    //       JSON.stringify(toolCallResult),
+    //       sourceAgent.id
+    //     );
+    //   } else {
+    //     output = toolCallResult;
+    //   }
+    //   return output as Interaction;
+    // } else if (resultType === InteractionType.PLAN) {
+    //   // If the result is a task list, record it as a plan
+    //   const plan = this.constructPlan(
+    //     thread,
+    //     result.result as AgentPlan,
+    //     sourceAgent.id
+    //   );
+    //   // Plan is not directly returned to the user, it is executed first and then the outcome is returned to the user
+    //   output = plan;
+    //   return output as Interaction;
+    // } else if (resultType === InteractionType.JUDGEMENT) {
+    //   // If the result is a judgement, record it as a judgement
+    //   const judgement = this.constructJudgement(
+    //     thread,
+    //     result.result as AgentJudgement,
+    //     sourceAgent.id
+    //   );
+
+    //   if (toUser) {
+    //     output = this.constructMessage(
+    //       thread,
+    //       MessageRole.ASSISTANT,
+    //       JSON.stringify(judgement),
+    //       sourceAgent.id
+    //     );
+    //   } else {
+    //     output = judgement;
+    //   }
+    //   return output as Interaction;
+    // } else if (resultType === InteractionType.MESSAGE) {
+    //   // Record the agent message
+    //   if (toUser) {
+    //     output = this.constructMessage(
+    //       thread,
+    //       MessageRole.ASSISTANT,
+    //       JSON.stringify(result.result),
+    //       sourceAgent.id
+    //     );
+    //   } else {
+    //     output = this.constructMessage(
+    //       thread,
+    //       MessageRole.ASSISTANT,
+    //       JSON.stringify(result.result),
+    //       sourceAgent.id,
+    //       targetAgent?.id
+    //     );
+    //   }
+    //   return output as Interaction;
+    // } else {
+    //   throw new Error("Invalid chain result");
+    // }
+  // }
 
   private determineResultType(
     result: ChainExecutionResult
@@ -357,24 +399,29 @@ export class OrchestrationManager extends Manager {
       `Overall Goal: ${plan.goal}\n\n`+
       `${task.step && task.step > 1 ? `Previous Tasks: \n${previousTasks}\n` : ""}\n`+
       `Current Task: ${task.instruction}`;
+      const decodedTaskMessage = decodeURIComponent(taskMessage);
+
+      // Create input based on chain type
+      const input = this.createChainInput(chainConfig, decodedTaskMessage);
+      if (input instanceof Error) {
+        throw input;
+      }
 
       // Execute chain
-      const result = await this.chainManager.executeChain(agent.chainId, {
-        task: taskMessage,
-        // thread_history: this.threads.get(plan.threadId)?.messages
-      });
+      const result = await this.chainManager.executeChain(agent.chainId, input);
 
       if (result.success && result.result) {
-        await this.handleChainResult(
+        const executionOutput = await this.handleChainResult(
           result,
           thread,
           false,
+          agent,
           agent
         );
 
         task.status = TaskStatus.COMPLETED;
         task.result = result.result;
-        previousTasks += `\nCompleted Task ${task.step}: ${task.instruction} - Output: ${result.result}\n`;
+        previousTasks += `\nCompleted Task ${task.step}: ${task.instruction} - Output: ${JSON.stringify(executionOutput)}\n`;
       } else {
         task.status = TaskStatus.FAILED;
         task.result = result.error;
@@ -384,10 +431,18 @@ export class OrchestrationManager extends Manager {
       this.constructMessage(
         thread,
         MessageRole.ASSISTANT,
-        JSON.stringify(previousTasks, null, 2),
+        JSON.stringify(previousTasks),
         agent.id
       );
     }
+
+    // Return to user the outcome of the plan execution
+    this.constructMessage(
+      thread,
+      MessageRole.ASSISTANT,
+      JSON.stringify(previousTasks),
+      plan.targetAgentId,
+    );
   }
 
   private async executeToolCall(
@@ -467,16 +522,31 @@ export class OrchestrationManager extends Manager {
     targetAgentId?: string,
     sourceAgentId?: string
   ): Message {
+    const formattedContent = typeof content === 'string' ? 
+    this.formatInteractionContent(content) : 
+    JSON.stringify(content, null, 2);
+
     const messageInteraction: Message = {
       ...thread.createBaseEntity(),
       threadId: thread.id,
       type: InteractionType.MESSAGE,
       role: role,
-      content,
+      content: formattedContent,
       targetAgentId: targetAgentId,
       sourceAgentId: sourceAgentId,
     };
     thread.addInteraction(messageInteraction);
     return messageInteraction;
+  }
+
+  private formatInteractionContent(content: string): string {
+    try {
+      // Try to parse and re-stringify to ensure consistent formatting
+      const parsed = JSON.parse(content);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      // If not valid JSON, return as-is
+      return content;
+    }
   }
 }

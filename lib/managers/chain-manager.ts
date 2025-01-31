@@ -104,10 +104,8 @@ export class ChainManager extends Manager {
     const storedChains = useChainStore.getState().chains;
     for (const [id, chain] of storedChains) {
       if (!this.chains.has(id)) {
-        this.chains.set(id, {
-          ...chain,
-          chainInstance: this.createChainInstance(chain)
-        });
+        // ChainInstance is not hydrated here as linkedAgent requires AgentManager to be initialized first, which happens after ChainManager initialization
+        this.chains.set(id, chain)
       }
     }
 
@@ -119,14 +117,6 @@ export class ChainManager extends Manager {
       });
       this.handleError(error as Error, { context: 'initialization' });
     }
-  }
-
-  async loadPersistedChain(chain: Omit<Chain, 'chainInstance'>): Promise<void> {
-    const chainInstance = this.createChainInstance(chain);
-    this.chains.set(chain.id, {
-      ...chain,
-      chainInstance: chainInstance
-    });
   }
 
   createChain(config: ChainConfig): Chain {
@@ -229,7 +219,10 @@ export class ChainManager extends Manager {
       }
 
       if (!chain.chainInstance) {
-        throw new Error(`Chain instance not found: ${chainId}`);
+        // ChainInstance will be created the first time this chain is executed after hydration
+        const chainInstance = this.createChainInstance(chain);
+        chain.chainInstance = chainInstance;
+        this.chains.set(chainId, chain);
       }
 
       // Execute the chain and handle response based on chain type

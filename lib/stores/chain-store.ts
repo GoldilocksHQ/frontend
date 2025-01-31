@@ -4,7 +4,6 @@ import { Chain } from '../managers/chain-manager'
 import { customStorage, logMiddleware } from './middleware'
 
 interface ChainStoreState {
-  _hasHydrated: boolean
   chains: Map<string, Chain>;
   addChain: (chain: Chain) => void;
   updateChain: (chain: Chain) => void;
@@ -12,7 +11,6 @@ interface ChainStoreState {
 }
 
 export const createChainStore: StateCreator<ChainStoreState, [], [["zustand/persist", unknown]]> = (set) => ({
-  _hasHydrated: false,
   chains: new Map(),
   addChain: (chain) => set((state) => ({
     chains: new Map(state.chains).set(chain.id, {

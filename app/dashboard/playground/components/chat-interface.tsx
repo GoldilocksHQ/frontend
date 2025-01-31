@@ -147,12 +147,83 @@ export function ChatInterface({
                       {new Date(interaction.createdAt).toLocaleString()}
                     </span>
                   </div>
-                  <p className="text-sm whitespace-pre-line break-words">
-                    {interaction.type === InteractionType.MESSAGE ? (interaction as Message).content : ""}
-                    {interaction.type === InteractionType.TASK ? `Task: ${JSON.stringify((interaction as Task).instruction)}` : ""}
-                    {interaction.type === InteractionType.PLAN ? `Plan: ${JSON.stringify((interaction as Plan).goal)}\nTasks: ${JSON.stringify((interaction as Plan).tasks)}` : ""}
-                    {interaction.type === InteractionType.JUDGEMENT ? `Judgement: ${JSON.stringify((interaction as Judgement).satisfied)}` : ""}
-                    {interaction.type === InteractionType.TOOL_CALL ? `Tool Call: ${JSON.stringify((interaction as ToolCall).toolName)}\nFunction Name: ${JSON.stringify((interaction as ToolCall).functionName)}\nParameters: ${JSON.stringify((interaction as ToolCall).parameters)}` : ""}
+                  <p className="text-sm font-mono whitespace-pre-wrap break-words overflow-x-auto bg-background/50 p-2 rounded">
+                    {(() => {
+                      try {
+                        const content = (() => {
+                          switch (interaction.type) {
+                            case InteractionType.MESSAGE:
+                              // Try to parse and re-format if it's JSON
+                              try {
+                                const parsed = JSON.parse((interaction as Message).content);
+                                return parsed;
+                              } catch {
+                                return (interaction as Message).content;
+                              }
+                            case InteractionType.TASK:
+                              return {
+                                instruction: (interaction as Task).instruction,
+                                status: (interaction as Task).status,
+                                result: (interaction as Task).result
+                              };
+                            case InteractionType.PLAN:
+                              return {
+                                goal: (interaction as Plan).goal,
+                                tasks: (interaction as Plan).tasks.map((task: Task) => ({
+                                  step: task.step,
+                                  instruction: task.instruction,
+                                  sourceAgentId: (interaction as Plan).sourceAgentId,
+                                  status: task.status,
+                                  result: task.result,
+                                  dependencies: task.dependencies
+                                })),
+                                reasoning: (interaction as Plan).reasoning
+                              };
+                            case InteractionType.JUDGEMENT:
+                              return {
+                                satisfied: (interaction as Judgement).satisfied,
+                                score: (interaction as Judgement).score,
+                                analysis: (interaction as Judgement).analysis,
+                                feedback: (interaction as Judgement).feedback
+                              };
+                            case InteractionType.TOOL_CALL:
+                              return {
+                                tool: (interaction as ToolCall).toolName,
+                                function: (interaction as ToolCall).functionName,
+                                parameters: (interaction as ToolCall).parameters,
+                                result: (interaction as ToolCall).result
+                              };
+                            default:
+                              return interaction;
+                          }
+                        })();
+
+                        // Format the content
+                        if (typeof content === 'string') {
+                          return content;
+                        }
+                        
+                        // Custom JSON formatting with syntax highlighting
+                        const formattedJson = JSON.stringify(content, null, 2)
+                          // Structural elements (braces and brackets) - subtle slate
+                          .replace(/[{]/g, '<span class="text-slate-700">{</span>')
+                          .replace(/[}]/g, '<span class="text-slate-700">}</span>')
+                          .replace(/[[\]]/g, (match) => `<span class="text-slate-700">${match}</span>`)
+                          
+                          // Property names - muted indigo
+                          .replace(/"([^"]+)":/g, '<span class="text-indigo-700">"$1"</span>:')
+                          
+                          // String values - muted teal
+                          .replace(/: "([^"]+)"/g, ': <span class="text-black-700">"$1"</span>')
+                          
+                          // Numbers and booleans - muted amber
+                          .replace(/: (true|false|null|\d+)/g, ': <span class="text-red-600">$1</span>');
+
+                        return <div dangerouslySetInnerHTML={{ __html: formattedJson }} />;
+                      } catch (error) {
+                        return `Error formatting content: ${error instanceof Error ? error.message : 'Unknown error'}`;
+                      }
+                    })()}
                   </p>
                 </div>
               ))}
