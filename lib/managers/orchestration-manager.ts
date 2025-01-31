@@ -9,15 +9,15 @@ import {
   MessageRole,
   Message,
   AgentPlan,
-  AgentTask,
   AgentJudgement,
   AgentToolCall,
   ToolCall,
   Plan,
   Judgement,
   Task,
-  TaskStatus,
+  InteractionStatus,
   InteractionType,
+  InteractionError,
 } from "../core/thread";
 import { ThreadStatus } from "../core/thread";
 import { ChainConfig, ChainExecutionResult, ChainType } from "./chain-manager";
@@ -63,13 +63,14 @@ export class OrchestrationManager extends Manager {
     initiatingAgentId: string
   ): Promise<void> {
     try {
-      // Record user message
-      this.constructMessage(
+      // Record user message. The initiating agent is the target agent for this message.
+      const userMessage = this.constructNewInteraction(
         thread,
-        MessageRole.USER,
-        content,
+        InteractionType.MESSAGE,
+        undefined,
         initiatingAgentId
       );
+      this.appendMessageConstruction(userMessage, MessageRole.USER, content);
 
       // Get target agent
       const targetAgent = this.agentManager.getAgent(initiatingAgentId);
@@ -113,7 +114,6 @@ export class OrchestrationManager extends Manager {
           const plan = output as Plan;
           await this.executePlan(plan, thread);
         }
-
       } else {
         thread.updateStatus(ThreadStatus.FAILED, result.error);
       }
@@ -136,7 +136,7 @@ export class OrchestrationManager extends Manager {
 
   createChainInput(
     chainConfig: ChainConfig,
-    content: string,
+    content: string
   ): Record<string, unknown> | Error {
     if (chainConfig.type === ChainType.CONVERSATION) {
       return { content: content };
@@ -182,134 +182,222 @@ export class OrchestrationManager extends Manager {
       throw resultType;
     }
 
-    let output: unknown;
-    const formattedResult = typeof result.result === 'string' ? 
-      this.formatInteractionContent(result.result) : 
-      JSON.stringify(result.result, null, 2);
+    let output: Interaction;
+    const formattedResult: unknown =
+      typeof result.result === "string"
+        ? this.formatInteractionContent(result.result)
+        : result.result;
 
     switch (resultType) {
       case InteractionType.TOOL_CALL:
-        const agentToolCall = result.result as AgentToolCall;
-        const toolCallResult = await this.executeToolCall(agentToolCall, sourceAgent.id);
-        const formattedToolCall = JSON.stringify(toolCallResult, null, 2);
-        
-        this.constructToolCallInteraction(thread, agentToolCall, toolCallResult, sourceAgent.id);
-        
-        output = toUser ? 
-          this.constructMessage(thread, MessageRole.ASSISTANT, formattedToolCall, sourceAgent.id) :
-          toolCallResult;
-        break;
-  
-      case InteractionType.PLAN:
-        output = this.constructPlan(thread, result.result as AgentPlan, sourceAgent.id);
-        break;
-  
-      case InteractionType.JUDGEMENT:
-        const judgement = this.constructJudgement(
+        // Create an empty new tool call interaction
+        const toolCallInteraction = this.constructNewInteraction(
           thread,
-          result.result as AgentJudgement,
+          InteractionType.TOOL_CALL,
+          sourceAgent.id,
           sourceAgent.id
         );
-        
-        output = toUser ?
-          this.constructMessage(thread, MessageRole.ASSISTANT, JSON.stringify(judgement, null, 2), sourceAgent.id) :
-          judgement;
+        try {
+          // Add tool call properties to the interaction
+          toolCallInteraction.status = InteractionStatus.IN_PROGRESS;
+          const agentToolCall = formattedResult as AgentToolCall;
+          this.appendToolCallInteractionConstruction(
+            toolCallInteraction,
+            agentToolCall
+          );
+
+          // Execute the tool call and store the result to the interaction
+          const toolCallResult = await this.executeToolCall(
+            agentToolCall,
+            sourceAgent.id
+          );
+          if (toolCallResult instanceof Error) {
+            throw toolCallResult;
+          }
+          const formattedToolCall = JSON.stringify(toolCallResult, null, 2);
+          (toolCallInteraction as ToolCall).result = formattedToolCall;
+          (toolCallInteraction as ToolCall).status = InteractionStatus.SUCCESS;
+
+          // Return the tool call result to the user or store it as a tool call interaction
+          output = toUser
+            ? (() => {
+                const message = this.constructNewInteraction(
+                  thread,
+                  InteractionType.MESSAGE,
+                  sourceAgent.id
+                );
+                this.appendMessageConstruction(
+                  message,
+                  MessageRole.ASSISTANT,
+                  JSON.stringify(toolCallInteraction, null, 2)
+                );
+                return message as Message;
+              })()
+            : toolCallInteraction;
+        } catch (error) {
+          this.appendErrorInteractionConstruction(toolCallInteraction, error);
+          output = toolCallInteraction;
+        }
+
         break;
-  
-      case InteractionType.MESSAGE:
-        output = this.constructMessage(
+
+      case InteractionType.PLAN:
+        const plan = this.constructNewInteraction(
           thread,
-          MessageRole.ASSISTANT,
-          formattedResult,
+          InteractionType.PLAN,
+          sourceAgent.id,
+          sourceAgent.id
+        );
+        try {
+          this.appendPlanConstruction(
+            plan,
+            formattedResult as AgentPlan,
+            thread
+          );
+        } catch (error) {
+          this.appendErrorInteractionConstruction(plan, error);
+        } finally {
+          output = plan;
+        }
+        break;
+
+      case InteractionType.JUDGEMENT:
+        const judgement = this.constructNewInteraction(
+          thread,
+          InteractionType.JUDGEMENT,
+          sourceAgent.id,
+          sourceAgent.id
+        );
+        try {
+          this.appendJudgementConstruction(
+            judgement,
+            formattedResult as AgentJudgement
+          );
+          output = toUser
+            ? (() => {
+                const message = this.constructNewInteraction(
+                  thread,
+                  InteractionType.MESSAGE,
+                  sourceAgent.id
+                );
+                this.appendMessageConstruction(
+                  message,
+                  MessageRole.ASSISTANT,
+                  JSON.stringify(judgement, null, 2)
+                );
+                return message as Message;
+              })()
+            : judgement;
+        } catch (error) {
+          this.appendErrorInteractionConstruction(judgement, error);
+          output = judgement;
+        }
+        break;
+
+      case InteractionType.MESSAGE:
+        const message = this.constructNewInteraction(
+          thread,
+          InteractionType.MESSAGE,
           sourceAgent.id,
           toUser ? undefined : targetAgent?.id
         );
+        try {
+          this.appendMessageConstruction(
+            message,
+            MessageRole.ASSISTANT,
+            formattedResult as string
+          );
+        } catch (error) {
+          this.appendErrorInteractionConstruction(message, error);
+        } finally {
+          output = message;
+        }
         break;
-  
+
       default:
         throw new Error("Invalid chain result");
     }
-  
+
     return output as Interaction;
   }
 
-    // if (resultType === InteractionType.TOOL_CALL) {
-    //   // If the result is a tool call, execute the tool call then store the result
-    //   const agentToolCall = result.result as AgentToolCall;
-    //   const toolCallResult = await this.executeToolCall(
-    //     agentToolCall,
-    //     sourceAgent.id
-    //   );
-    //   this.constructToolCallInteraction(
-    //     thread,
-    //     agentToolCall,
-    //     toolCallResult,
-    //     sourceAgent.id
-    //   );
+  // if (resultType === InteractionType.TOOL_CALL) {
+  //   // If the result is a tool call, execute the tool call then store the result
+  //   const agentToolCall = result.result as AgentToolCall;
+  //   const toolCallResult = await this.executeToolCall(
+  //     agentToolCall,
+  //     sourceAgent.id
+  //   );
+  //   this.constructToolCallInteraction(
+  //     thread,
+  //     agentToolCall,
+  //     toolCallResult,
+  //     sourceAgent.id
+  //   );
 
-    //   // Record the tool call result
-    //   if (toUser) {
-    //     output = this.constructMessage(
-    //       thread,
-    //       MessageRole.ASSISTANT,
-    //       JSON.stringify(toolCallResult),
-    //       sourceAgent.id
-    //     );
-    //   } else {
-    //     output = toolCallResult;
-    //   }
-    //   return output as Interaction;
-    // } else if (resultType === InteractionType.PLAN) {
-    //   // If the result is a task list, record it as a plan
-    //   const plan = this.constructPlan(
-    //     thread,
-    //     result.result as AgentPlan,
-    //     sourceAgent.id
-    //   );
-    //   // Plan is not directly returned to the user, it is executed first and then the outcome is returned to the user
-    //   output = plan;
-    //   return output as Interaction;
-    // } else if (resultType === InteractionType.JUDGEMENT) {
-    //   // If the result is a judgement, record it as a judgement
-    //   const judgement = this.constructJudgement(
-    //     thread,
-    //     result.result as AgentJudgement,
-    //     sourceAgent.id
-    //   );
+  //   // Record the tool call result
+  //   if (toUser) {
+  //     output = this.constructMessage(
+  //       thread,
+  //       MessageRole.ASSISTANT,
+  //       JSON.stringify(toolCallResult),
+  //       sourceAgent.id
+  //     );
+  //   } else {
+  //     output = toolCallResult;
+  //   }
+  //   return output as Interaction;
+  // } else if (resultType === InteractionType.PLAN) {
+  //   // If the result is a task list, record it as a plan
+  //   const plan = this.constructPlan(
+  //     thread,
+  //     result.result as AgentPlan,
+  //     sourceAgent.id
+  //   );
+  //   // Plan is not directly returned to the user, it is executed first and then the outcome is returned to the user
+  //   output = plan;
+  //   return output as Interaction;
+  // } else if (resultType === InteractionType.JUDGEMENT) {
+  //   // If the result is a judgement, record it as a judgement
+  //   const judgement = this.constructJudgement(
+  //     thread,
+  //     result.result as AgentJudgement,
+  //     sourceAgent.id
+  //   );
 
-    //   if (toUser) {
-    //     output = this.constructMessage(
-    //       thread,
-    //       MessageRole.ASSISTANT,
-    //       JSON.stringify(judgement),
-    //       sourceAgent.id
-    //     );
-    //   } else {
-    //     output = judgement;
-    //   }
-    //   return output as Interaction;
-    // } else if (resultType === InteractionType.MESSAGE) {
-    //   // Record the agent message
-    //   if (toUser) {
-    //     output = this.constructMessage(
-    //       thread,
-    //       MessageRole.ASSISTANT,
-    //       JSON.stringify(result.result),
-    //       sourceAgent.id
-    //     );
-    //   } else {
-    //     output = this.constructMessage(
-    //       thread,
-    //       MessageRole.ASSISTANT,
-    //       JSON.stringify(result.result),
-    //       sourceAgent.id,
-    //       targetAgent?.id
-    //     );
-    //   }
-    //   return output as Interaction;
-    // } else {
-    //   throw new Error("Invalid chain result");
-    // }
+  //   if (toUser) {
+  //     output = this.constructMessage(
+  //       thread,
+  //       MessageRole.ASSISTANT,
+  //       JSON.stringify(judgement),
+  //       sourceAgent.id
+  //     );
+  //   } else {
+  //     output = judgement;
+  //   }
+  //   return output as Interaction;
+  // } else if (resultType === InteractionType.MESSAGE) {
+  //   // Record the agent message
+  //   if (toUser) {
+  //     output = this.constructMessage(
+  //       thread,
+  //       MessageRole.ASSISTANT,
+  //       JSON.stringify(result.result),
+  //       sourceAgent.id
+  //     );
+  //   } else {
+  //     output = this.constructMessage(
+  //       thread,
+  //       MessageRole.ASSISTANT,
+  //       JSON.stringify(result.result),
+  //       sourceAgent.id,
+  //       targetAgent?.id
+  //     );
+  //   }
+  //   return output as Interaction;
+  // } else {
+  //   throw new Error("Invalid chain result");
+  // }
   // }
 
   private determineResultType(
@@ -331,118 +419,218 @@ export class OrchestrationManager extends Manager {
     }
   }
 
-  private constructPlan(
-    thread: Thread,
+  private appendPlanConstruction(
+    interaction: Interaction,
     result: AgentPlan,
-    agentId: string
+    thread: Thread
   ): Plan {
-    const plan: Plan = {
-      ...thread.createBaseEntity(),
-      threadId: thread.id,
-      type: InteractionType.PLAN,
-      goal: (result as AgentPlan).goal,
-      reasoning: (result as AgentPlan).reasoning,
-      tasks: [],
-      completedTaskIds: [],
-      sourceAgentId: agentId,
-      targetAgentId: agentId,
-    };
+    // Validate the plan structure
+    if (!result || typeof result !== "object") {
+      throw new Error("Invalid plan structure: result must be an object");
+    }
 
+    if (!result.goal || typeof result.goal !== "string") {
+      throw new Error("Invalid plan structure: goal must be a string");
+    }
+
+    if (!Array.isArray(result.tasks)) {
+      throw new Error("Invalid plan structure: tasks must be an array");
+    }
+
+    // Construct the plan
+    (interaction as Plan).goal = result.goal;
+    (interaction as Plan).reasoning = result.reasoning || "";
+    (interaction as Plan).tasks = [];
+    (interaction as Plan).completedTaskIds = [];
+    (interaction as Plan).status = InteractionStatus.PENDING;
+
+    // Process each task
     for (const taskInfo of result.tasks) {
-      const task: Task = {
+      if (!taskInfo || typeof taskInfo !== "object") {
+        throw new Error("Invalid task structure in plan");
+      }
+
+      const task = {
         ...thread.createBaseEntity(),
         threadId: thread.id,
         type: InteractionType.TASK,
-        instruction: (taskInfo as AgentTask).instruction,
-        status: TaskStatus.PENDING,
-        targetAgentId: (taskInfo as AgentTask).requiredAgent,
-        dependencies: (taskInfo as AgentTask).dependencies.map((id) =>
-          String(id)
-        ),
-        planId: plan.id,
-        step: taskInfo.step,
+        instruction: taskInfo.instruction || "",
+        status: InteractionStatus.PENDING,
+        targetAgentId: taskInfo.requiredAgent,
+        dependencies: Array.isArray(taskInfo.dependencies)
+          ? taskInfo.dependencies.map(String)
+          : [],
+        planId: interaction.id,
+        step: taskInfo.step || 0,
       };
-      plan.tasks.push(task);
+
+      (interaction as Plan).tasks.push(task as Task);
     }
 
-    thread.addInteraction(plan);
-    return plan;
+    return interaction as Plan;
   }
 
+  // private constructNewPlan(
+  //   thread: Thread,
+  //   result: AgentPlan,
+  //   agentId: string
+  // ): Plan {
+  //   const plan: Plan = {
+  //     ...thread.createBaseEntity(),
+  //     status: InteractionStatus.PENDING,
+  //     threadId: thread.id,
+  //     type: InteractionType.PLAN,
+  //     goal: (result as AgentPlan).goal,
+  //     reasoning: (result as AgentPlan).reasoning,
+  //     tasks: [],
+  //     completedTaskIds: [],
+  //     sourceAgentId: agentId,
+  //     targetAgentId: agentId,
+  //   };
+
+  //   for (const taskInfo of result.tasks) {
+  //     const task: Task = {
+  //       ...thread.createBaseEntity(),
+  //       threadId: thread.id,
+  //       type: InteractionType.TASK,
+  //       instruction: (taskInfo as AgentTask).instruction,
+  //       status: InteractionStatus.PENDING,
+  //       targetAgentId: (taskInfo as AgentTask).requiredAgent,
+  //       dependencies: (taskInfo as AgentTask).dependencies.map((id) =>
+  //         String(id)
+  //       ),
+  //       planId: plan.id,
+  //       step: taskInfo.step,
+  //     };
+  //     plan.tasks.push(task);
+  //   }
+
+  //   thread.addInteraction(plan);
+  //   return plan;
+  // }
+
   private async executePlan(plan: Plan, thread: Thread): Promise<void> {
-    // TODO: Insert Task in thread and update thread, create status for plan
+    const previousTasks: string[] = [];
 
-    let previousTasks = "";
     for (const task of plan.tasks) {
-      task.status = TaskStatus.IN_PROGRESS;
+      try {
+        task.status = InteractionStatus.IN_PROGRESS;
 
-      if (!task.targetAgentId) {
-        throw new Error('No target agent ID assigned to task');
-      }
+        if (!task.targetAgentId) {
+          throw new Error("No target agent ID assigned to task");
+        }
 
-      const agent = this.agentManager.getAgent(task.targetAgentId);
-      if (!agent) {
-        throw new Error('No agent assigned to task');
-      }
+        const agent = this.agentManager.getAgent(task.targetAgentId);
+        if (!agent) {
+          throw new Error("No agent assigned to task");
+        }
 
-      // Get agent's chain
-      if (!agent.chainId) {
-        throw new Error('No chain ID assigned to agent');
-      }
+        // Get agent's chain
+        if (!agent.chainId) {
+          throw new Error("No chain ID assigned to agent");
+        }
 
-      const chainConfig = this.chainManager.getChain(agent.chainId);
-      if (!chainConfig) {
-        throw new Error('Chain not found');
-      }
+        // Get agent's chain config
+        const chainConfig = this.chainManager.getChain(agent.chainId);
+        if (!chainConfig) {
+          throw new Error("Chain not found");
+        }
 
-      const taskMessage = 
-      `Overall Goal: ${plan.goal}\n\n`+
-      `${task.step && task.step > 1 ? `Previous Tasks: \n${previousTasks}\n` : ""}\n`+
-      `Current Task: ${task.instruction}`;
-      const decodedTaskMessage = decodeURIComponent(taskMessage);
+        // Create a input summary message of the plan and previous tasks
+        const taskMessage =
+          `Overall Goal: ${plan.goal}\n\n` +
+          `Previous Tasks:\n${previousTasks.join('\n')}\n\n` +
+          `Current Task: ${task.instruction}`;
+        const decodedTaskMessage = decodeURIComponent(taskMessage);
 
-      // Create input based on chain type
-      const input = this.createChainInput(chainConfig, decodedTaskMessage);
-      if (input instanceof Error) {
-        throw input;
-      }
+        // Create input based on chain type
+        const input = this.createChainInput(chainConfig, decodedTaskMessage);
+        if (input instanceof Error) {
+          throw input;
+        }
 
-      // Execute chain
-      const result = await this.chainManager.executeChain(agent.chainId, input);
-
-      if (result.success && result.result) {
-        const executionOutput = await this.handleChainResult(
-          result,
-          thread,
-          false,
-          agent,
-          agent
+        // Execute chain
+        const result = await this.chainManager.executeChain(
+          agent.chainId,
+          input
         );
 
-        task.status = TaskStatus.COMPLETED;
-        task.result = result.result;
-        previousTasks += `\nCompleted Task ${task.step}: ${task.instruction} - Output: ${JSON.stringify(executionOutput)}\n`;
-      } else {
-        task.status = TaskStatus.FAILED;
-        task.result = result.error;
+        if (result.success && result.result) {
+          const executionOutput = await this.handleChainResult(
+            result,
+            thread,
+            false,
+            agent,
+            agent
+          );
+
+          task.status = InteractionStatus.SUCCESS;
+          task.result = result.result;
+          previousTasks.push(this.formatTaskOutput(task, executionOutput));
+        } else {
+          this.appendErrorInteractionConstruction(task, result.error);
+          previousTasks.push(
+            `Task ${task.step}: ${task.instruction}\nStatus: Failed\nError: ${result.error}`
+          );
+        }
+
+        // Update the thread with the completed task
+        const message = this.constructNewInteraction(
+          thread,
+          InteractionType.MESSAGE,
+          agent.id
+        );
+        this.appendMessageConstruction(
+          message,
+          MessageRole.ASSISTANT,
+          JSON.stringify(previousTasks, null, 2)
+        );
+      } catch (error) {
+        this.appendErrorInteractionConstruction(task, error);
       }
-      
-      // Update the thread with the completed task
-      this.constructMessage(
+
+      // Return to user the outcome of the plan execution
+      const summaryMessage = this.constructNewInteraction(
         thread,
-        MessageRole.ASSISTANT,
-        JSON.stringify(previousTasks),
-        agent.id
+        InteractionType.MESSAGE,
+        plan.targetAgentId
+      );
+
+      const formattedSummary = 
+      `Plan Execution Summary\n` +
+      `====================\n` +
+      `Goal: ${plan.goal}\n\n` +
+      previousTasks.join('\n\n');
+
+      this.appendMessageConstruction(
+        summaryMessage, 
+        MessageRole.ASSISTANT, 
+        formattedSummary
       );
     }
+  }
 
-    // Return to user the outcome of the plan execution
-    this.constructMessage(
-      thread,
-      MessageRole.ASSISTANT,
-      JSON.stringify(previousTasks),
-      plan.targetAgentId,
-    );
+  private formatTaskOutput(task: Task, executionOutput: Interaction): string {
+    let formattedOutput = `Task ${task.step}: ${task.instruction}\n`;
+    formattedOutput += '----------------------------------------\n';
+    
+    if (executionOutput.type === InteractionType.TOOL_CALL) {
+      const toolCall = executionOutput as ToolCall;
+      formattedOutput += `Tool: ${toolCall.toolName}.${toolCall.functionName}\n`;
+      
+      try {
+        // Parse and format the result if it's JSON
+        const result = JSON.parse(toolCall.result as string);
+        formattedOutput += 'Result:\n' + JSON.stringify(result, null, 2);
+      } catch {
+        formattedOutput += `Result: ${toolCall.result}`;
+      }
+    } else if (executionOutput.type === InteractionType.MESSAGE) {
+      const message = executionOutput as Message;
+      formattedOutput += `Response: ${message.content}`;
+    }
+    
+    return formattedOutput;
   }
 
   private async executeToolCall(
@@ -473,70 +661,98 @@ export class OrchestrationManager extends Manager {
     );
   }
 
-  constructToolCallInteraction(
+  constructNewInteraction(
     thread: Thread,
-    toolCall: AgentToolCall,
-    toolCallResult: unknown,
-    agentId: string
-  ): ToolCall {
-    const toolCallInteraction: ToolCall = {
+    interactionType: InteractionType,
+    sourceAgentId?: string,
+    targetAgentId?: string
+  ): Interaction {
+    const interaction: Interaction = {
       ...thread.createBaseEntity(),
       threadId: thread.id,
-      type: InteractionType.TOOL_CALL,
-      toolName: toolCall.execution.connectorName,
-      functionName: toolCall.execution.functionName,
-      parameters: toolCall.execution.parameters,
-      result: toolCallResult,
-      sourceAgentId: agentId,
-      targetAgentId: agentId,
-    };
-    thread.addInteraction(toolCallInteraction);
-    return toolCallInteraction;
-  }
-
-  constructJudgement(
-    thread: Thread,
-    result: AgentJudgement,
-    agentId: string
-  ): Judgement {
-    const judgementInteraction: Judgement = {
-      ...thread.createBaseEntity(),
-      threadId: thread.id,
-      type: InteractionType.JUDGEMENT,
-      satisfied: result.satisfied,
-      score: result.score,
-      analysis: result.analysis,
-      feedback: result.feedback,
-      sourceAgentId: agentId,
-      targetAgentId: agentId,
-    };
-    thread.addInteraction(judgementInteraction);
-    return judgementInteraction;
-  }
-
-  // Utility functions for storing messages
-  constructMessage(
-    thread: Thread,
-    role: MessageRole.USER | MessageRole.ASSISTANT,
-    content: string,
-    targetAgentId?: string,
-    sourceAgentId?: string
-  ): Message {
-    const formattedContent = typeof content === 'string' ? 
-    this.formatInteractionContent(content) : 
-    JSON.stringify(content, null, 2);
-
-    const messageInteraction: Message = {
-      ...thread.createBaseEntity(),
-      threadId: thread.id,
-      type: InteractionType.MESSAGE,
-      role: role,
-      content: formattedContent,
-      targetAgentId: targetAgentId,
+      status: InteractionStatus.PENDING,
+      type: interactionType,
       sourceAgentId: sourceAgentId,
+      targetAgentId: targetAgentId,
     };
-    thread.addInteraction(messageInteraction);
-    return messageInteraction;
+    thread.addInteraction(interaction);
+    return interaction;
+  }
+
+  appendToolCallInteractionConstruction(
+    interaction: Interaction,
+    toolCall: AgentToolCall
+  ): Interaction {
+    (interaction as ToolCall).toolName = toolCall.execution.connectorName;
+    (interaction as ToolCall).functionName = toolCall.execution.functionName;
+    (interaction as ToolCall).parameters = toolCall.execution.parameters;
+    return interaction;
+  }
+
+  // constructNewToolCallInteraction(
+  //   thread: Thread,
+  //   toolCall: AgentToolCall,
+  //   agentId: string
+  // ): ToolCall {
+  //   const toolCallInteraction: ToolCall = {
+  //     ...thread.createBaseEntity(),
+  //     status: InteractionStatus.PENDING,
+  //     threadId: thread.id,
+  //     type: InteractionType.TOOL_CALL,
+  //     toolName: toolCall.execution.connectorName,
+  //     functionName: toolCall.execution.functionName,
+  //     parameters: toolCall.execution.parameters,
+  //     sourceAgentId: agentId,
+  //     targetAgentId: agentId,
+  //   };
+  //   thread.addInteraction(toolCallInteraction);
+  //   return toolCallInteraction;
+  // }
+
+  appendJudgementConstruction(
+    interaction: Interaction,
+    result: AgentJudgement
+  ): Judgement {
+    (interaction as Judgement).satisfied = result.satisfied;
+    (interaction as Judgement).score = result.score;
+    (interaction as Judgement).analysis = result.analysis;
+    (interaction as Judgement).feedback = result.feedback;
+    return interaction as Judgement;
+  }
+
+  // // Utility functions for storing messages
+  // constructMessage(
+  //   thread: Thread,
+  //   role: MessageRole.USER | MessageRole.ASSISTANT,
+  //   content: string,
+  //   targetAgentId?: string,
+  //   sourceAgentId?: string
+  // ): Message {
+  //   const formattedContent = typeof content === 'string' ?
+  //   this.formatInteractionContent(content) :
+  //   JSON.stringify(content, null, 2);
+
+  //   const messageInteraction: Message = {
+  //     ...thread.createBaseEntity(),
+  //     threadId: thread.id,
+  //     type: InteractionType.MESSAGE,
+  //     role: role,
+  //     content: formattedContent,
+  //     targetAgentId: targetAgentId,
+  //     sourceAgentId: sourceAgentId,
+  //   };
+  //   thread.addInteraction(messageInteraction);
+  //   return messageInteraction;
+  // }
+
+  appendMessageConstruction(
+    interaction: Interaction,
+    role: MessageRole,
+    content: string
+  ): Message {
+    (interaction as Message).role = role;
+    (interaction as Message).content = content;
+    return interaction as Message;
   }
 
   private formatInteractionContent(content: string): string {
@@ -548,5 +764,24 @@ export class OrchestrationManager extends Manager {
       // If not valid JSON, return as-is
       return content;
     }
+  }
+
+  private appendErrorInteractionConstruction(
+    interaction: Interaction,
+    error: unknown
+  ): Interaction {
+    const interactionError: InteractionError = {
+      code: error instanceof Error ? error.name : "UNKNOWN_ERROR",
+      message:
+        error instanceof Error ? error.message : "An unknown error occurred",
+      details:
+        error instanceof Error
+          ? { stack: JSON.stringify(error.stack) }
+          : undefined,
+      timestamp: Date.now(),
+    };
+    (interaction as Interaction).error = interactionError;
+    (interaction as Interaction).status = InteractionStatus.FAILED;
+    return interaction;
   }
 }

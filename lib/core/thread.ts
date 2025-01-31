@@ -14,10 +14,10 @@ export enum InteractionType {
   TOOL_CALL = 'tool_call'
 }
 
-export enum TaskStatus {
+export enum InteractionStatus {
   PENDING = 'pending',
   IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
+  SUCCESS = 'success',
   FAILED = 'failed',
   BLOCKED = 'blocked'
 }
@@ -65,6 +65,14 @@ export interface AgentJudgement {
   taskId?: string;
 }
 
+export interface InteractionError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  timestamp: number;
+  stack?: string;
+}
+
 /**
  * Common fields for all interactions in a thread
  */
@@ -82,7 +90,9 @@ export interface Interaction extends BaseEntity {
   threadId: string;
   type: InteractionType;
   sourceAgentId?: string;
-  targetAgentId?: string;  // Made optional as not all interactions need a target
+  targetAgentId?: string;
+  status: InteractionStatus;
+  error?: InteractionError;
 }
 
 /**
@@ -100,7 +110,6 @@ export interface Message extends Interaction {
 export interface Task extends Interaction {
   type: InteractionType.TASK;
   instruction: string;
-  status: TaskStatus;
   planId?: string;
   step?: number;
   dependencies?: string[];
@@ -115,7 +124,7 @@ export interface ToolCall extends Interaction {
   toolName: string;
   functionName: string;
   parameters: Record<string, unknown>;
-  result: unknown;
+  result?: unknown;
 }
 
 /**
@@ -201,7 +210,7 @@ export class Thread extends ThreadEntity {
     this.status = ThreadStatus.ACTIVE;
   }
 
-  addInteraction(interaction: Interaction): void {
+  addInteraction(interaction: Interaction): Interaction {
     this.interactions.push(interaction);
     
     // Categorize interaction
@@ -222,6 +231,7 @@ export class Thread extends ThreadEntity {
 
     this.update();
     useThreadStore.getState().updateThread(this.id, this);
+    return this.interactions.at(-1) as Interaction;
   }
 
   getInteraction(id: string): Interaction | undefined {

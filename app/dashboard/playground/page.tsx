@@ -12,7 +12,7 @@ import { AgentManager } from "@/lib/managers/agent-manager";
 import { ConversationManager } from "@/lib/managers/conversation-manager";
 import { useStores } from "@/lib/stores";
 import { ConnectorManager } from "@/lib/managers/connector-manager";
-import { Interaction, InteractionType, Message, MessageRole } from "@/lib/core/thread";
+import { Interaction, InteractionStatus, InteractionType, Message, MessageRole } from "@/lib/core/thread";
 
 export default function PlaygroundPage() {
   const { uiState: ui, agentState: agent } = useStores();
@@ -142,6 +142,7 @@ export default function PlaygroundPage() {
         role: MessageRole.USER,
         content: message,
         targetAgentId: agent.selectedAgent.id,
+        status: InteractionStatus.PENDING,
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
