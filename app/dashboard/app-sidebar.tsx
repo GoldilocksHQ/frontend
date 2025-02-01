@@ -1,4 +1,4 @@
-import { Home, User, Inbox, KeyRound, Plug } from "lucide-react"
+import { Home, User, Inbox, Plug } from "lucide-react"
 import {
   Sidebar,
   SidebarHeader,

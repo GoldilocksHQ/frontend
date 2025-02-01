@@ -72,7 +72,7 @@ export function AgentConfigSidebar({
     }
 
     setHasUnsavedChanges(false);
-  }, [agent]);
+  }, [agent, agentManager]);
 
   const handleSave = async () => {
     try {
