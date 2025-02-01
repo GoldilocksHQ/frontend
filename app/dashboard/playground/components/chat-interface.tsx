@@ -101,7 +101,9 @@ const formatInteractionContent = (interaction: Interaction) => {
             tasks: (interaction as Plan).tasks.map((task: Task) => ({
               step: task.step,
               instruction: task.instruction,
+              targetAgentId: task.targetAgentId,
               status: task.status,
+              error: task.error,
               result: task.result,
               dependencies: task.dependencies
             })),

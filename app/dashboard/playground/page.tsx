@@ -165,6 +165,10 @@ export default function PlaygroundPage() {
       if (thread) {
         const agentMessages = thread.messages.filter(m => m.role === MessageRole.ASSISTANT);
         setMessages(prev => [...prev, ...agentMessages]);
+
+        const agentThreads = conversationManager.getThreadsByAgent(agent.selectedAgent?.id as string);
+        const agentThreadsInteractions = agentThreads.flatMap(thread => thread.interactions).sort((a, b) => a.createdAt - b.createdAt);
+        setInteractionHistory(agentThreadsInteractions);
       }
 
     } catch (error) {
@@ -174,6 +178,7 @@ export default function PlaygroundPage() {
         variant: "destructive"
       });
     } finally {
+      
       ui.setWorking(false);
       ui.setWorkingStatus("");
     }

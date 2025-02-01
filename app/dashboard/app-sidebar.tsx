@@ -34,11 +34,6 @@ const items = [
     url: "/dashboard/account",
     icon: User,
   },
-  {
-    title: "Token Manager",
-    url: "/dashboard/token-manager-test",
-    icon: KeyRound,
-  },
 ]
 
 export function AppSidebar() {

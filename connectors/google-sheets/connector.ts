@@ -23,6 +23,8 @@ type FunctionArgs = {
   spreadsheetId?: string;
   range?: string;
   values?: string[][];
+  sheetName?: string;
+  parentFolderId?: string;
 };
 
 export async function handleFunction(
@@ -48,6 +50,12 @@ export async function handleFunction(
           return { success: false, result: null, error: 'Spreadsheet ID, range, and values are required' };
         }
         return await updateValues(userId, args.spreadsheetId, args.range, args.values);
+      }
+      case 'createSheet': {
+        if (!args.sheetName) {
+          return { success: false, result: null, error: 'Sheet name is required' };
+        }
+        return await createSheet(userId, args.sheetName);
       }
       default:
         return { success: false, result: null, error: `Unknown function: ${functionName}` };
@@ -146,6 +154,38 @@ export async function updateValues(
     return { success: true, result: response.data };
   } catch (error) {
     console.error("Error updating values:", error);
+    return { success: false, result: null, error: String(error) };
+  }
+}
+
+export async function createSheet(
+  userId: UUID,
+  sheetName: string,
+  parentFolderId?: string
+): Promise<FunctionResult<sheets_v4.Schema$Spreadsheet>> {
+  try {
+    const credentials = await retrieveCredentials(userId, CONNECTOR_NAME);
+    if (!credentials.success || !credentials.credentials) {
+      return { success: false, result: null, error: credentials.error || "No valid credentials" };
+    }
+
+    const oauth2Client = await createOAuth2Client();
+    oauth2Client.setCredentials({
+      access_token: credentials.credentials.access_token,
+      refresh_token: credentials.credentials.refresh_token,
+    });
+
+    const sheets = google.sheets({ version: "v4", auth: oauth2Client });
+    const response = await sheets.spreadsheets.create({
+      requestBody: {
+        properties: { title: sheetName },
+        ...(parentFolderId ? { parents: [parentFolderId] } : {}),
+      },
+    });
+
+    return { success: true, result: response.data };
+  } catch (error) {
+    console.error("Error creating sheet:", error);
     return { success: false, result: null, error: String(error) };
   }
 }

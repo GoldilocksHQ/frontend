@@ -113,6 +113,41 @@ export const googleSheetsToolDefinition: ToolDefinition = {
         },
       },
     },
+    {
+      name: "createSheet",
+      description: "Create a new Google Sheet",
+      parameters: {
+        type: "object",
+        properties: {
+          sheetName: {
+            type: "string",
+            description: "The name of the sheet to create",
+          },
+          parentFolderId: {
+            type: "string",
+            description: "The ID of the parent folder where to create the new sheet",
+          }
+        },
+        required: ["sheetName"],
+      },
+      responseSchema: {
+        type: "json_schema",
+        json_schema: {
+          name: "create_sheet_response",
+          schema: {
+            type: "object",
+            properties: { 
+              spreadsheetId: { type: "string" },
+              spreadsheetName: { type: "string" },
+              spreadsheetUrl: { type: "string" },
+            },
+            required: ["spreadsheetId", "spreadsheetName", "spreadsheetUrl"],
+            additionalProperties: false,
+          },
+          strict: true,
+        }
+      }
+    },
   ],
 };
 

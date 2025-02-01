@@ -456,7 +456,7 @@ export class OrchestrationManager extends Manager {
         type: InteractionType.TASK,
         instruction: taskInfo.instruction || "",
         status: InteractionStatus.PENDING,
-        targetAgentId: taskInfo.requiredAgent,
+        targetAgentId: taskInfo.requiredAgentId,
         dependencies: Array.isArray(taskInfo.dependencies)
           ? taskInfo.dependencies.map(String)
           : [],

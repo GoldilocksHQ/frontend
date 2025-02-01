@@ -99,9 +99,25 @@ export class TaskExecutorChain extends BaseChain {
         { role: "system", content: prompt }
       ]);
 
+      this.validateAgentToolCall(agentToolCall);
+
       return { agentToolCall };
     } catch (error) {
       throw new Error(`Failed to execute task: ${error}`);
+    }
+  }
+
+  private validateAgentToolCall(agentToolCall: AgentToolCall): void {
+    if (!agentToolCall.execution.connectorName || typeof agentToolCall.execution.connectorName !== "string") {
+      throw new Error("Agent tool call must include a connector name");
+    }
+
+    if (!agentToolCall.execution.functionName || typeof agentToolCall.execution.functionName !== "string") {
+      throw new Error("Agent tool call must include a function name");
+    }
+
+    if (!agentToolCall.execution.parameters || typeof agentToolCall.execution.parameters !== "object") {
+      throw new Error("Agent tool call must include parameters");
     }
   }
 } 

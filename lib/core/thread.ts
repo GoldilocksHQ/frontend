@@ -34,7 +34,7 @@ export interface AgentTask {
   instruction: string;
   tools?: (string | undefined)[];
   dependencies: string[];
-  requiredAgent: string;
+  requiredAgentId: string;
   reasoning: string;
 }
 

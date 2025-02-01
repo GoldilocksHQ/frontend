@@ -14,7 +14,7 @@ Given a task, you should:
 2. Break down the task into smaller, logical steps
 3. For each step:
    - Provide a clear description
-   - Identify which agents and tools are needed from the EXACT list below (do not invent or assume agents or tools exist)
+   - Identify which agents (use agent IDs) and tools are needed from the EXACT list below
    - Note any dependencies on other steps
    - Include reasoning for the approach
 4. Ensure the steps are ordered correctly
@@ -27,8 +27,7 @@ Available agents:
 
 IMPORTANT WARNINGS:
 - You can ONLY use tools that are listed above. Do not reference any tools that are not in the provided list.
-- Do not assume any tools exist beyond what is listed.
-- Do not try to use general tools like "pen", "paper", "browser", etc.
+- ONLY provide the ID of the agent that is required to complete the task.
 - If a task cannot be completed with the available tools, state this in the reasoning.
 `;
 
@@ -39,7 +38,7 @@ const responseSchema = z.object({
     instruction: z.string().describe("The instruction of the task"),
     tools: z.array(z.string().optional().describe("The tools that are needed to complete the task")),
     dependencies: z.array(z.number()).describe("The tasks that must be completed before this task can be started"),
-    requiredAgent: z.string().describe("The ID of the agent that is required to complete the task, can include yourself"),
+    requiredAgentId: z.string().describe("The ID of the agent that is required to complete the task. Do not use agent names, only ID"),
     reasoning: z.string().describe("The reasoning behind the task planning")
   })).describe("The tasks that need to be completed to achieve the goal"),
   reasoning: z.string().describe("The overall reasoning behind the task planning")
@@ -103,29 +102,42 @@ export class TaskPlannerChain extends BaseChain {
 
       const modeWithStructuredOutput = this.model.withStructuredOutput(responseSchema);
 
-      // Get completion from model
-      const response = await modeWithStructuredOutput.invoke([
-        { role: "system", content: prompt }
-      ]);
-
-      // Convert to a Plan
-      const agentPlan: AgentPlan = {
-        goal: response.goal,
-        tasks: response.tasks.map((task) => {
-          return {
-            step: task.step,
-            instruction: task.instruction,
-            tools: task.tools.filter((tool): tool is string => tool !== undefined),
-            dependencies: task.dependencies.map((dependency) => dependency.toString()),
-            requiredAgent: task.requiredAgent,
-            reasoning: task.reasoning
-          };
-        }),
-        reasoning: response.reasoning,
+      let isValid = false;  
+      let invokeCount = 0;
+      let agentPlan: AgentPlan = {
+        goal: "",
+        tasks: [],
+        reasoning: ""
       };
 
-      // Validate task list
-      this.validateTaskList(agentPlan);
+      while (!isValid && invokeCount < 3) {
+          // Get completion from model
+        const response = await modeWithStructuredOutput.invoke([
+          { role: "system", content: prompt }
+        ]);
+
+        // Convert to a Plan
+        agentPlan = {
+          goal: response.goal,
+          tasks: response.tasks.map((task) => {
+          return {
+              step: task.step,
+              instruction: task.instruction,
+              tools: task.tools.filter((tool): tool is string => tool !== undefined),
+              dependencies: task.dependencies.map((dependency) => dependency.toString()),
+              requiredAgentId: task.requiredAgentId,
+              reasoning: task.reasoning
+            };
+          }),
+          reasoning: response.reasoning,
+        };
+
+        // Validate task list
+        isValid = this.checkAgentPlan(agentPlan);
+        invokeCount++;
+      }
+
+      // this.validateAgentPlan(agentPlan);
 
       return { agentPlan };
     } catch (error) {
@@ -133,7 +145,46 @@ export class TaskPlannerChain extends BaseChain {
     }
   }
 
-  private validateTaskList(agentPlan: AgentPlan): void {
+
+  private checkAgentPlan(agentPlan: AgentPlan): boolean {
+    if (!agentPlan.goal || typeof agentPlan.goal !== "string") {
+      return false;
+    }
+
+    if (!Array.isArray(agentPlan.tasks) || agentPlan.tasks.length === 0) {
+      return false;
+    }
+
+    for (const task of agentPlan.tasks) {
+      if (!task.step || typeof task.step !== "number") {
+        return false;
+      }
+
+      if (!task.instruction || typeof task.instruction !== "string") {
+        return false;
+      }
+
+      if (!task.requiredAgentId || typeof task.requiredAgentId !== "string") {
+        return false;
+      }
+
+      if (!Array.isArray(task.dependencies)) {
+        return false;
+      }
+
+      if (!task.reasoning || typeof task.reasoning !== "string") {
+        return false;
+      }
+    }
+
+    if (!agentPlan.reasoning || typeof agentPlan.reasoning !== "string") {
+      return false;
+    }
+
+    return true;
+  } 
+
+  private validateAgentPlan(agentPlan: AgentPlan): void {
     if (!agentPlan.goal || typeof agentPlan.goal !== "string") {
       throw new Error("Task plan must include a goal string");
     }
@@ -151,7 +202,7 @@ export class TaskPlannerChain extends BaseChain {
         throw new Error("Each task must have a string instruction");
       }
 
-      if (!task.requiredAgent || typeof task.requiredAgent !== "string") {
+      if (!task.requiredAgentId || typeof task.requiredAgentId !== "string") {
         throw new Error("Each task must have a string requiredAgent");
       }
 
