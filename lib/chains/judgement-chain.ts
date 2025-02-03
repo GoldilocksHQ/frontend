@@ -22,12 +22,12 @@ Evaluate the response based on:
 const responseSchema = z.object({
   satisfied: z.boolean().describe("Whether the response satisfies the requirements"),
   score: z.number().describe("A score between 0 and 100 based on the evaluation"),
+  feedback: z.string().describe("Detailed explanation of the evaluation"),
   analysis: z.object({
     strengths: z.array(z.string()).describe("Strengths of the response"),
     weaknesses: z.array(z.string()).describe("Weaknesses of the response"),
     missing: z.array(z.string()).describe("Missing elements or gaps in the response")
-  }).describe("Analysis of the response"),
-  feedback: z.string().describe("Detailed explanation of the evaluation")
+  }).describe("Analysis of the response")
 });
 
 interface JudgementInput {
@@ -78,17 +78,41 @@ export class JudgementChain extends BaseChain {
 
       const modeWithStructuredOutput = this.model.withStructuredOutput(responseSchema);
 
-      // Get completion from model
-      const response = await modeWithStructuredOutput.invoke([
-        { role: "system", content: prompt }
-      ]);
+      let isValid = false;  
+      let invokeCount = 0;
+      let agentJudgement: AgentJudgement = {
+        satisfied: false,
+        score: 0,
+        analysis: {
+          strengths: [],
+          weaknesses: [],
+          missing: []
+        },
+        feedback: ""
+      };
 
-      // Parse response into judgement
-      // const judgement = JSON.parse(response.content as string) as Judgement;
-      const agentJudgement = response as AgentJudgement;
+      while (!isValid && invokeCount < 3) {
 
-      // Validate judgement
-      this.validateJudgement(agentJudgement);
+        // Get completion from model
+        const response = await modeWithStructuredOutput.invoke([
+          { role: "system", content: prompt }
+        ]);
+
+        // Parse response into judgement
+        agentJudgement = response as AgentJudgement;
+
+        // Validate judgement
+        const error = this.validateJudgement(agentJudgement);
+        
+        if (error) {
+          invokeCount++;
+          if (invokeCount >= 3) {
+            throw error;
+          }
+        } else {
+          isValid = true;
+        }
+      }
 
       return { agentJudgement };
     } catch (error) {
@@ -96,33 +120,35 @@ export class JudgementChain extends BaseChain {
     }
   }
 
-  private validateJudgement(judgement: AgentJudgement): void {
+  private validateJudgement(judgement: AgentJudgement): Error | null {
     if (typeof judgement.satisfied !== "boolean") {
-      throw new Error("Judgement must include a boolean satisfied flag");
+      return new Error("Judgement must include a boolean satisfied flag");
     }
 
     if (typeof judgement.score !== "number" || judgement.score < 0 || judgement.score > 100) {
-      throw new Error("Judgement must include a score between 0 and 100");
+      return new Error("Judgement must include a score between 0 and 100");
     }
 
     if (!judgement.analysis || typeof judgement.analysis !== "object") {
-      throw new Error("Judgement must include an analysis object");
+      return new Error("Judgement must include an analysis object");
     }
 
     if (!Array.isArray(judgement.analysis.strengths)) {
-      throw new Error("Analysis must include a strengths array");
+      return new Error("Analysis must include a strengths array");
     }
 
     if (!Array.isArray(judgement.analysis.weaknesses)) {
-      throw new Error("Analysis must include a weaknesses array");
+      return new Error("Analysis must include a weaknesses array");
     }
 
     if (!Array.isArray(judgement.analysis.missing)) {
-      throw new Error("Analysis must include a missing array");
+      return new Error("Analysis must include a missing array");
     }
 
     if (!judgement.feedback || typeof judgement.feedback !== "string") {
-      throw new Error("Judgement must include a feedback string");
+      return new Error("Judgement must include a feedback string");
     }
+
+    return null;
   }
 } 

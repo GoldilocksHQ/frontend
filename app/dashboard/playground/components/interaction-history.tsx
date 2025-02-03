@@ -79,8 +79,13 @@ export function InteractionHistory({
             return {
               satisfied: (interaction as Judgement).satisfied,
               score: (interaction as Judgement).score,
-              analysis: (interaction as Judgement).analysis,
-              feedback: (interaction as Judgement).feedback
+              analysis: {
+                ...(interaction as Judgement).analysis,
+                strengths: (interaction as Judgement).analysis?.strengths || [],
+                weaknesses: (interaction as Judgement).analysis?.weaknesses || [],
+                missing: (interaction as Judgement).analysis?.missing || []
+              },
+              feedback: (interaction as Judgement).feedback || "No feedback provided"
             };
           case InteractionType.TOOL_CALL:
             const toolCall = interaction as ToolCall;

@@ -21,6 +21,7 @@ import {
 import { ThreadStatus } from "../core/thread";
 import { ChainConfig, ChainExecutionResult, ChainType } from "./chain-manager";
 import { Agent } from "./agent-manager";
+import { models } from "./chain-manager";
 
 export class OrchestrationManager extends Manager {
   private static instance: OrchestrationManager | null = null;
@@ -301,9 +302,10 @@ export class OrchestrationManager extends Manager {
     thread: Thread,
     fromUser: boolean
   ): Promise<void> {
+    const judgementAgent = await this.createJudgementAgent(thread);
     const previousTasks: string[] = [];
     for (const task of plan.tasks) {
-      previousTasks.push(await this.executeTask(task, plan, thread, previousTasks));
+      previousTasks.push(await this.executeTask(task, plan, thread, previousTasks, judgementAgent));
     }
 
     const summary = this.createPlanExecutionSummary(plan, previousTasks);
@@ -323,40 +325,64 @@ export class OrchestrationManager extends Manager {
     task: Task,
     plan: Plan,
     thread: Thread,
-    previousTasks: string[]
+    previousTasks: string[],
+    judgementAgent: Agent
   ): Promise<string> {
     const executor = this.createTaskExecutor();
     try {
       const agent = executor.validateTask(task);
-      const input = executor.prepareTaskInput(plan, previousTasks, task);
-      const agentChain = this.chainManager.getChain(agent.chainId!);
-      const formattedInput = this.chainInputStrategies[agentChain!.type](input);
-      const result = await this.chainManager.executeChain(agent.chainId!, formattedInput);
-      
-      if (result.success && result.result) {
-        const chainInteraction = await this.handleChainResult(
-          result,
-          thread,
-          false,
-          agent
-        );
-        const newResult: ChainExecutionResult =  result
 
-        if (chainInteraction.type === InteractionType.TOOL_CALL) {
-          newResult.result = { 
-            ...(result.result as AgentToolCall), 
-            output: JSON.stringify((chainInteraction as ToolCall).result, null, 2)
-          }
-        } else {
-          newResult.result = chainInteraction.type === InteractionType.PLAN ? JSON.stringify({goal: (chainInteraction as Plan).goal, tasks: (chainInteraction as Plan).tasks }, null, 2)
-          : chainInteraction.type === InteractionType.JUDGEMENT ? JSON.stringify({satisfied: (chainInteraction as Judgement).satisfied, feedback: (chainInteraction as Judgement).feedback}, null, 2)
-          : chainInteraction.type === InteractionType.MESSAGE ? JSON.stringify({content: (chainInteraction as Message).content}, null, 2)
-          : "No previous results"
-        }
+      let missing: string[] = [];
+      let resultApproved: boolean = false;
+      let taskExecutionCount: number = 0;
+      let newResult: unknown = null;
+
+      while (!resultApproved && taskExecutionCount < 3) {
+        const input = executor.prepareTaskInput(plan, previousTasks, task, missing);
+        const agentChain = this.chainManager.getChain(agent.chainId!);
+        const formattedInput = this.chainInputStrategies[agentChain!.type](input);
+        const result = await this.chainManager.executeChain(agent.chainId!, formattedInput);
         
-        return executor.handleTaskResult(newResult, task);
+        if (result.success && result.result) {
+          const chainInteraction = await this.handleChainResult(
+            result,
+            thread,
+            false,
+            agent
+          );
+
+          newResult =  result as ChainExecutionResult
+
+          if (chainInteraction.type === InteractionType.TOOL_CALL) {
+            (newResult as ChainExecutionResult).result = { 
+              ...(result.result as AgentToolCall), 
+              output: JSON.stringify((chainInteraction as ToolCall).result, null, 2)
+            }
+          } else {
+            (newResult as ChainExecutionResult).result = chainInteraction.type === InteractionType.PLAN ? JSON.stringify({goal: (chainInteraction as Plan).goal, tasks: (chainInteraction as Plan).tasks }, null, 2)
+            : chainInteraction.type === InteractionType.JUDGEMENT ? JSON.stringify({satisfied: (chainInteraction as Judgement).satisfied, feedback: (chainInteraction as Judgement).feedback}, null, 2)
+            : chainInteraction.type === InteractionType.MESSAGE ? JSON.stringify({content: (chainInteraction as Message).content}, null, 2)
+            : "No previous results"
+          }
+
+          // Execute the judgement chain
+          const judgementInteraction = await this.executeJudgement(
+            judgementAgent, newResult as ChainExecutionResult, thread, task);
+          
+          if (judgementInteraction.satisfied) {
+            resultApproved = true;
+          } else {
+            missing = judgementInteraction.analysis.missing;
+          }
+        }  
+        taskExecutionCount++;
       }
-      throw new Error(result.error);
+
+      if (resultApproved) {
+        return executor.handleTaskResult(newResult as ChainExecutionResult, task);
+      } else {
+        throw new Error((newResult as ChainExecutionResult).error);
+      }
     } catch (error) {
       return this.errorService.handleExecutionError(task, error, thread);
     }
@@ -372,11 +398,11 @@ export class OrchestrationManager extends Manager {
         return agent;
       },
 
-      prepareTaskInput: (plan: Plan, previousTasks: string[], task: Task) => {
+      prepareTaskInput: (plan: Plan, previousTasks: string[], task: Task, missing: string[]) => {
         const taskMessage = `Overall Goal: ${plan.goal}\n\n
           Previous Tasks:\n${previousTasks.join("\n")}\n\n
           Current Task: ${task.instruction}
-        `;
+        ` + (missing ? `Missing: ${missing.map((m) => "["+m+"]").join(", ")}` : "");
         const decodedTaskMessage = decodeURIComponent(taskMessage);
         // const input = this.chainInputStrategies[ChainType.TASK_EXECUTION](decodedTaskMessage);
         return decodedTaskMessage;
@@ -420,7 +446,34 @@ export class OrchestrationManager extends Manager {
     );
     return result;
   }
+
+  private async createJudgementAgent(thread: Thread): Promise<Agent> {
+    const judgementAgent = await this.agentManager.createAgent({
+      name: `Judgement Agent ${thread.id.slice(0, 8)}`,
+      description: "A judgement agent that is responsible for judging the quality of the task",
+      chainType: ChainType.JUDGEMENT,
+      modelName: models[0].name,
+      toolIds: [],
+      linkedAgentIds: [],
+    });
+
+    return judgementAgent;
+  }
   
+  private async executeJudgement(judgementAgent: Agent, result: ChainExecutionResult, thread: Thread, task: Task): Promise<Judgement> {
+    const judgementInput = `Does the result fulfil the instruction?
+      Instruction: ${JSON.stringify(task.instruction, null, 2)}
+      Result: ${JSON.stringify(result.result, null, 2)}`
+    const judgementResult = await this.handleChainExecution(thread, judgementInput, judgementAgent);
+    const judgementInteraction = await this.handleChainResult(
+      judgementResult,
+      thread,
+      false,
+      judgementAgent
+    ) as Judgement;
+    return judgementInteraction;
+  }
+
   // ----------- Utility Services -----------
   private createJudgementInput(content: string) {
     const splitChars = ["\n", "?"];

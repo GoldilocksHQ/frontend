@@ -19,6 +19,7 @@ Given a task, you should:
    - Include reasoning for the approach
 4. Ensure the steps are ordered correctly
 5. Validate that all requirements are covered
+6. Ensure the assigned agents are capable of completing the task
 
 Task to plan: {input}
 
@@ -133,11 +134,16 @@ export class TaskPlannerChain extends BaseChain {
         };
 
         // Validate task list
-        isValid = this.checkAgentPlan(agentPlan);
-        invokeCount++;
+        const error = this.validateAgentPlan(agentPlan);
+        if (error) {
+          invokeCount++;
+          if (invokeCount >= 3) {
+            throw error;
+          }
+        } else {
+          isValid = true;
+        }
       }
-
-      // this.validateAgentPlan(agentPlan);
 
       return { agentPlan };
     } catch (error) {
@@ -145,78 +151,41 @@ export class TaskPlannerChain extends BaseChain {
     }
   }
 
-
-  private checkAgentPlan(agentPlan: AgentPlan): boolean {
+  private validateAgentPlan(agentPlan: AgentPlan): Error | null {
     if (!agentPlan.goal || typeof agentPlan.goal !== "string") {
-      return false;
+      return new Error("Task plan must include a goal string");
     }
 
     if (!Array.isArray(agentPlan.tasks) || agentPlan.tasks.length === 0) {
-      return false;
+      return new Error("Task plan must include at least one task");
     }
 
     for (const task of agentPlan.tasks) {
       if (!task.step || typeof task.step !== "number") {
-        return false;
+        return new Error("Each task must have a number step");
       }
 
       if (!task.instruction || typeof task.instruction !== "string") {
-        return false;
+        return new Error("Each task must have a string instruction");
       }
 
       if (!task.requiredAgentId || typeof task.requiredAgentId !== "string") {
-        return false;
+        return new Error("Each task must have a string requiredAgent");
       }
 
       if (!Array.isArray(task.dependencies)) {
-        return false;
+        return new Error("Each task must have a dependencies array");
       }
 
       if (!task.reasoning || typeof task.reasoning !== "string") {
-        return false;
+        return new Error("Each task must have a string reasoning");
       }
     }
 
     if (!agentPlan.reasoning || typeof agentPlan.reasoning !== "string") {
-      return false;
+      return new Error("Task plan must include overall reasoning");
     }
 
-    return true;
-  } 
-
-  private validateAgentPlan(agentPlan: AgentPlan): void {
-    if (!agentPlan.goal || typeof agentPlan.goal !== "string") {
-      throw new Error("Task plan must include a goal string");
-    }
-
-    if (!Array.isArray(agentPlan.tasks) || agentPlan.tasks.length === 0) {
-      throw new Error("Task plan must include at least one task");
-    }
-
-    for (const task of agentPlan.tasks) {
-      if (!task.step || typeof task.step !== "number") {
-        throw new Error("Each task must have a number step");
-      }
-
-      if (!task.instruction || typeof task.instruction !== "string") {
-        throw new Error("Each task must have a string instruction");
-      }
-
-      if (!task.requiredAgentId || typeof task.requiredAgentId !== "string") {
-        throw new Error("Each task must have a string requiredAgent");
-      }
-
-      if (!Array.isArray(task.dependencies)) {
-        throw new Error("Each task must have a dependencies array");
-      }
-
-      if (!task.reasoning || typeof task.reasoning !== "string") {
-        throw new Error("Each task must have a string reasoning");
-      }
-    }
-
-    if (!agentPlan.reasoning || typeof agentPlan.reasoning !== "string") {
-      throw new Error("Task plan must include overall reasoning");
-    }
+    return null;
   }
 } 
