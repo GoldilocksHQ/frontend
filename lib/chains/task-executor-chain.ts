@@ -20,17 +20,28 @@ Available connectors and their functions:
 
 Respond with a JSON object containing:
 1. The execution plan with connector name, function name, and parameters that match the parameter schema. All three are required.
-2. If no tools are required, provide your answer to the task directly
+2. Do not leave any fields blank or undefined.
+3. If no tools are required, provide your answer to the task directly
 `;
 
 const responseSchema = z.object({
-  response: z.string().describe("If no tools is required, provide your answer to the task here. If a tool is required, leave this empty."),
+  // response: z.string().describe("If no tools are required, provide your answer here. Leave empty if using a tool.").optional(),
   execution: z.object({
-    connectorName: z.string().describe("Name of the connector to use"),
-    functionName: z.string().describe("Name of the function to call"),
-    parameters: z.record(z.any()).describe("Parameters that match the function's parameter schema"),
-  }).describe("If a tool is required, provide the execution plan here. If no tool is required, insert blank inputs for all parameters.")
-});
+    connectorName: z.string().describe("Name of the connector to use, must not be blank"),
+    functionName: z.string().describe("Name of the function to call, must not be blank"),
+    parameters: z.record(z.any()).describe("Parameters matching the function's schema, must not be blank")
+  }).required()
+  
+  // .optional()
+// }).refine(
+//   (data) => 
+//     // XOR check - exactly one must be present
+//     (data.response ? 1 : 0) + (data.execution ? 1 : 0) === 1,
+//   {
+//     message: "Must provide either response or execution, not both",
+//     path: ["response"] // Points to the field that failed validation
+  }
+);
 
 interface TaskExecutorInput {
   input: {

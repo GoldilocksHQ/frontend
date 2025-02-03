@@ -13,7 +13,7 @@ export enum ErrorSeverity {
   LOW = "low",
   MEDIUM = "medium",
   HIGH = "high",
-  CRITICAL = "critical"
+  CRITICAL = "critical",
 }
 
 export interface ErrorFilter {
@@ -29,13 +29,13 @@ export class ManagedError extends Error {
 
   constructor(message: string, context: Partial<ErrorContext>) {
     super(message);
-    this.name = 'ManagedError';
+    this.name = "ManagedError";
     this.id = crypto.randomUUID() as UUID;
     this.context = {
       timestamp: context.timestamp || Date.now(),
-      source: context.source || 'unknown',
+      source: context.source || "unknown",
       severity: context.severity || ErrorSeverity.MEDIUM,
-      metadata: context.metadata
+      metadata: context.metadata,
     };
   }
 }
@@ -46,7 +46,7 @@ export class ErrorManager extends Manager {
   private maxErrors: number = 1000;
 
   private constructor() {
-    super({ name: 'ErrorManager' });
+    super({ name: "ErrorManager" });
   }
 
   static getInstance(): ErrorManager {
@@ -62,7 +62,7 @@ export class ErrorManager extends Manager {
       // Load any persisted errors from storage if needed
       this.setStatus(ManagerStatus.READY);
     } catch (error) {
-      this.handleError(error as Error, { context: 'initialization' });
+      this.handleError(error as Error, { context: "initialization" });
     }
   }
 
@@ -98,12 +98,15 @@ export class ErrorManager extends Manager {
     let errors = Array.from(this.errors.values());
 
     if (filter) {
-      errors = errors.filter(error => {
-        const matchesSource = !filter.source || error.context.source === filter.source;
-        const matchesSeverity = !filter.severity || error.context.severity === filter.severity;
-        const matchesTimeRange = (!filter.startTime || error.context.timestamp >= filter.startTime) &&
-                               (!filter.endTime || error.context.timestamp <= filter.endTime);
-        
+      errors = errors.filter((error) => {
+        const matchesSource =
+          !filter.source || error.context.source === filter.source;
+        const matchesSeverity =
+          !filter.severity || error.context.severity === filter.severity;
+        const matchesTimeRange =
+          (!filter.startTime || error.context.timestamp >= filter.startTime) &&
+          (!filter.endTime || error.context.timestamp <= filter.endTime);
+
         return matchesSource && matchesSeverity && matchesTimeRange;
       });
     }
@@ -118,25 +121,31 @@ export class ErrorManager extends Manager {
     }
 
     for (const [id, error] of this.errors.entries()) {
-      const matchesSource = !filter.source || error.context.source === filter.source;
-      const matchesSeverity = !filter.severity || error.context.severity === filter.severity;
-      const matchesTimeRange = (!filter.startTime || error.context.timestamp >= filter.startTime) &&
-                             (!filter.endTime || error.context.timestamp <= filter.endTime);
-      
+      const matchesSource =
+        !filter.source || error.context.source === filter.source;
+      const matchesSeverity =
+        !filter.severity || error.context.severity === filter.severity;
+      const matchesTimeRange =
+        (!filter.startTime || error.context.timestamp >= filter.startTime) &&
+        (!filter.endTime || error.context.timestamp <= filter.endTime);
+
       if (matchesSource && matchesSeverity && matchesTimeRange) {
         this.errors.delete(id);
       }
     }
   }
 
-  async handleError(error: Error | ManagedError, context?: Record<string, unknown>): Promise<void> {
+  async handleError(
+    error: Error | ManagedError,
+    context?: Record<string, unknown>
+  ): Promise<void> {
     if (error instanceof ManagedError) {
       this.logError(error.message, error.context);
     } else {
-      this.logError(error, { 
+      this.logError(error, {
         severity: ErrorSeverity.HIGH,
-        metadata: context
+        metadata: context,
       });
     }
   }
-} 
+}

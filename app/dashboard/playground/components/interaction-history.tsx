@@ -1,0 +1,248 @@
+import { Interaction, InteractionType, Judgement, Message, ToolCall, Plan, Task } from "@/lib/core/thread";
+import { AgentManager } from "@/lib/managers/agent-manager";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useEffect, useRef, useState } from "react";
+import React from "react";
+
+interface InteractionHistoryProps {
+  fullInteractionHistory: Interaction[];
+  agentManager: AgentManager;
+  isHistoryOpen: boolean;
+  setIsHistoryOpen: (open: boolean) => void;
+}
+
+export function InteractionHistory({
+  fullInteractionHistory,
+  agentManager,
+  isHistoryOpen,
+  setIsHistoryOpen
+}: InteractionHistoryProps) {
+  const [selectedType, setSelectedType] = useState<InteractionType | 'all'>('all');
+  const [expandedInteractionId, setExpandedInteractionId] = useState<string | null>(null);
+
+  const filteredInteractions = fullInteractionHistory.filter(interaction =>
+    selectedType === 'all' ? true : interaction.type === selectedType
+  );
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isHistoryOpen && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [isHistoryOpen, filteredInteractions]);
+
+  const formatInteractionContent = (interaction: Interaction) => {
+    try {
+      const content = (() => {
+        if (interaction.error) {
+          return interaction.error;
+        }
+  
+        switch (interaction.type) {
+          case InteractionType.MESSAGE:
+            try {
+              const messageContent = (interaction as Message).content;
+              if (messageContent.includes('Completed Task')) {
+                return formatTaskOutput(messageContent);
+              }
+              const parsed = JSON.parse(messageContent);
+              return parsed;
+            } catch {
+              return (interaction as Message).content;
+            }
+          case InteractionType.TASK:
+            return {
+              instruction: (interaction as Task).instruction,
+              status: (interaction as Task).status,
+              result: (interaction as Task).result
+            };
+          case InteractionType.PLAN:
+            return {
+              goal: (interaction as Plan).goal,
+              tasks: (interaction as Plan).tasks.map((task: Task) => ({
+                step: task.step,
+                instruction: task.instruction,
+                targetAgentId: task.targetAgentId,
+                status: task.status,
+                error: {
+                  code: task.error?.code,
+                  message: task.error?.message,
+                  details: task.error?.details
+                },
+                result: task.result,
+                dependencies: task.dependencies
+              })),
+              reasoning: (interaction as Plan).reasoning
+            };
+          case InteractionType.JUDGEMENT:
+            return {
+              satisfied: (interaction as Judgement).satisfied,
+              score: (interaction as Judgement).score,
+              analysis: (interaction as Judgement).analysis,
+              feedback: (interaction as Judgement).feedback
+            };
+          case InteractionType.TOOL_CALL:
+            const toolCall = interaction as ToolCall;
+            return {
+              tool: toolCall.toolName,
+              function: toolCall.functionName,
+              parameters: toolCall.parameters,
+              result: typeof toolCall.result === 'string' 
+                ? JSON.parse(toolCall.result)
+                : toolCall.result
+            };
+          default:
+            return interaction;
+        }
+      })();
+  
+      if (React.isValidElement(content)) {
+        return content;
+      }
+  
+      if (typeof content === 'string') {
+        return content;
+      }
+  
+      const formattedJson = JSON.stringify(content, null, 2)
+        .replace(/[{]/g, '<span class="text-slate-600">{</span>')
+        .replace(/[}]/g, '<span class="text-slate-600">}</span>')
+        .replace(/[[\]]/g, (match) => `<span class="text-slate-600">${match}</span>`)
+        .replace(/"([^"]+)":/g, '<span class="text-indigo-600">"$1"</span>:')
+        .replace(/: "([^"]+)"/g, ': <span class="text-emerald-600">"$1"</span>')
+        .replace(/: (true|false|null|\d+)/g, ': <span class="text-amber-600">$1</span>');
+  
+      return <div dangerouslySetInnerHTML={{ __html: formattedJson }} />;
+    } catch (error) {
+      return `Error formatting content: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  };
+
+  const formatTaskOutput = (content: string) => {
+    if (!content.includes('Completed Task')) return content;
+  
+    const tasks = content.split('\nCompleted Task').filter(Boolean);
+    return (
+      <div className="space-y-4">
+        {tasks.map((task, index) => {
+          const [taskDescription, outputStr] = task.split(' - Output: ');
+          try {
+            const output = JSON.parse(outputStr);
+            return (
+              <div key={index} className="border-l-2 border-slate-200 pl-4">
+                <div className="font-medium text-slate-700">
+                  {index === 0 ? taskDescription : `Completed Task${taskDescription}`}
+                </div>
+                {output.type === 'tool_call' && (
+                  <div className="mt-2 space-y-2">
+                    <div className="text-sm text-slate-600">
+                      Tool: {output.toolName}.{output.functionName}
+                    </div>
+                    <pre className="text-xs bg-slate-50 p-2 rounded-md overflow-x-auto">
+                      {JSON.stringify(JSON.parse(output.result), null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {output.type === 'message' && (
+                  <div className="mt-2 text-sm text-slate-600">
+                    {output.content}
+                  </div>
+                )}
+              </div>
+            );
+          } catch {
+            return (
+              <div key={index} className="border-l-2 border-slate-200 pl-4">
+                <div className="font-medium text-slate-700">
+                  {index === 0 ? taskDescription : `Completed Task${taskDescription}`}
+                </div>
+                <div className="mt-2 text-sm text-slate-600">{outputStr}</div>
+              </div>
+            );
+          }
+        })}
+      </div>
+    );
+  };
+
+
+  return (
+    <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+      <DialogContent className="max-w-[60vw] max-h-[80vh] h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Interaction History</DialogTitle>
+        </DialogHeader>
+        
+        {/* Type Tabs */}
+        <div className="flex gap-2 pb-4 border-b">
+          {['all', ...Object.values(InteractionType)].map(type => (
+            <button
+              key={type}
+              onClick={() => setSelectedType(type as InteractionType | 'all')}
+              className={`px-3 py-1 rounded-md text-sm ${
+                selectedType === type 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'bg-muted hover:bg-muted/80'
+              }`}
+            >
+              {type.replace('_', ' ').toLowerCase()}
+            </button>
+          ))}
+        </div>
+
+        {/* Interactions List */}
+        <div className="flex-1 overflow-y-auto space-y-4 pt-4">
+          {filteredInteractions.map((interaction) => (
+            <div
+              key={interaction.id}
+              className="bg-muted/50 p-4 rounded-lg space-y-2 max-w-[calc(60vw-3rem)]"
+            >
+              {/* Header with expand/collapse */}
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">
+                    {interaction.sourceAgentId ? 
+                      agentManager.getAgent(interaction.sourceAgentId)?.name || interaction.sourceAgentId 
+                      : "You"} 
+                    {"->"}
+                    {interaction.targetAgentId ? 
+                      agentManager.getAgent(interaction.targetAgentId)?.name || interaction.targetAgentId 
+                      : "You"}
+                  </p>
+                  <div className="text-xs text-muted-foreground">
+                    <span>Type: {interaction.type}</span>
+                    <span className="mx-2">•</span>
+                    <span>
+                      {new Date(interaction.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setExpandedInteractionId(
+                    expandedInteractionId === interaction.id ? null : interaction.id
+                  )}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {expandedInteractionId === interaction.id ? '▼' : '▶'}
+                </button>
+              </div>
+
+              {/* Collapsible Content */}
+              <div className={`overflow-hidden transition-all ${
+                expandedInteractionId === interaction.id 
+                  ? 'opacity-100' 
+                  : 'max-h-0 opacity-0'
+              }`}>
+                <div className="pt-2 text-sm font-mono whitespace-pre-wrap break-words 
+                  overflow-x-auto bg-background/50 p-2 rounded">
+                  {formatInteractionContent(interaction)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

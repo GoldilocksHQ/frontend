@@ -71,7 +71,8 @@ export default function PlaygroundPage() {
       // Get all messages for this agent
       const agentInteractions = conversationManager.getInteractionsByAgent(agent.selectedAgent.id);
       const messageHistory = agentInteractions
-        .filter(interaction => interaction.type === InteractionType.MESSAGE &&
+        .filter(interaction => 
+          interaction.type === InteractionType.MESSAGE &&
           (interaction as Message).content !== ""
         )
         .sort((a, b) => a.createdAt - b.createdAt) as Message[];
@@ -163,7 +164,8 @@ export default function PlaygroundPage() {
       // Update messages with the agent's response
       const thread = conversationManager.getThread(threadId);
       if (thread) {
-        const agentMessages = thread.messages.filter(m => m.role === MessageRole.ASSISTANT);
+        const agentMessages = thread.messages.filter(m => 
+          m.role === MessageRole.ASSISTANT);
         setMessages(prev => [...prev, ...agentMessages]);
 
         const agentThreads = conversationManager.getThreadsByAgent(agent.selectedAgent?.id as string);
@@ -246,6 +248,7 @@ export default function PlaygroundPage() {
                 workingStatus={ui.workingStatus}
                 input={input}
                 setInput={setInput}
+                agentManager={agentManager}
               />
             </div>
             <AgentConfigSidebar 

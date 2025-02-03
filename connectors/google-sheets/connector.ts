@@ -9,15 +9,11 @@ import {
   createOAuth2Client,
   retrieveCredentials,
 } from "../google/auth";
+import { FunctionResult } from "../../services/api/connector-service";
 
 const CONNECTOR_NAME = "google-sheets";
 
 // Define types for function arguments and results
-type FunctionResult<T> = {
-  success: boolean;
-  result: T | null;
-  error?: string;
-};
 
 type FunctionArgs = {
   spreadsheetId?: string;
@@ -70,7 +66,7 @@ export async function readValues(
   userId: UUID,
   spreadsheetId: string,
   range: string
-): Promise<FunctionResult<string[][]>> {
+): Promise<FunctionResult<string[][] | null>> {
   try {
     const credentials = await retrieveCredentials(userId, CONNECTOR_NAME);
     if (!credentials.success || !credentials.credentials) {
@@ -89,7 +85,7 @@ export async function readValues(
       range,
     });
 
-    return { success: true, result: response.data.values || [] };
+    return { success: true, result: response.data.values || [], error: undefined };
   } catch (error) {
     console.error("Error reading values:", error);
     return { success: false, result: null, error: String(error) };
@@ -101,7 +97,7 @@ export async function updateValues(
   spreadsheetId: string,
   range: string,
   values: string[][]
-): Promise<FunctionResult<sheets_v4.Schema$UpdateValuesResponse>> {
+): Promise<FunctionResult<sheets_v4.Schema$UpdateValuesResponse | null>> {
   try {
     const accessCredentials = constructCredentials(
       userId,
@@ -151,7 +147,7 @@ export async function updateValues(
       requestBody: { values },
     });
 
-    return { success: true, result: response.data };
+    return { success: true, result: response.data, error: undefined };
   } catch (error) {
     console.error("Error updating values:", error);
     return { success: false, result: null, error: String(error) };

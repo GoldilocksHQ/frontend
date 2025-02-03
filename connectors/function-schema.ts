@@ -162,7 +162,7 @@ export const googleDriveToolDefinition: ToolDefinition = {
         properties: {
           query: {
             type: "string",
-            description: "Search query to filter files which must have 3 parts: query_term, operator, value (e.g., 'name contains \"report\"' or 'mimeType=\"application/pdf\"')",
+            description: "Search query to filter files which must have 3 parts: query_term, operator, value (e.g., 'name contains \"report\"' or 'mimeType=\"application/pdf\". You must not leave this blank.)",
           },
           pageSize: {
             type: "number",

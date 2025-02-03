@@ -42,7 +42,7 @@ export const POST = withApiAuth(async (req: NextRequest) => {
       );
     }
 
-    return NextResponse.json({ result });
+    return NextResponse.json({ success, result, error });
   } catch (error) {
     console.error('Connector execution error:', error);
     return NextResponse.json(

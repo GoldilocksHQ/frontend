@@ -4,16 +4,11 @@ import { google } from 'googleapis';
 import { drive_v3 } from 'googleapis/build/src/apis/drive';
 import { UUID } from 'crypto';
 import { createOAuth2Client, retrieveCredentials } from '../google/auth';
+import { FunctionResult } from '../../services/api/connector-service';
 
 const CONNECTOR_NAME = 'google-drive';
 
 // Define types for function arguments and results
-type FunctionResult<T> = {
-  success: boolean;
-  result: T | null;
-  error?: string;
-};
-
 type FunctionArgs = {
   query?: string;
   pageSize?: number;

@@ -22,6 +22,13 @@ export interface Connector {
   status?: string;
 }
 
+export interface FunctionResult<T> {
+  success: boolean;
+  result: T | null;
+  error?: string;
+}
+
+
 export class ConnectorService {
   async getConnectors(userId?: string): Promise<Connector[]> {
     const { success, data, error } = await queryDatabase(
@@ -75,7 +82,7 @@ export class ConnectorService {
   }
 
 
-  async executeFunction(userId: UUID, func: ConnectorFunction) {
+  async executeFunction(userId: UUID, func: ConnectorFunction): Promise<FunctionResult<unknown>> {
     switch (func.connector) {
       case 'google-sheets':
         return handleGoogleSheetsFunction(userId, func.function, func.arguments);
