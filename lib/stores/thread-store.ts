@@ -33,15 +33,25 @@ const createThreadStore: StateCreator<ThreadState, [], [["zustand/persist", unkn
     return { threads: newThreads };
   }),
 
-  updateThread: (threadId: string, updates: Partial<Thread>) => set((state) => {
-    const thread = state.threads.get(threadId);
-    if (!thread) return state;
+  updateThread: (threadId: string, updates: Partial<Thread>) => 
+    set((state) => {
+      const thread = state.threads.get(threadId);
+      if (!thread) return state;
 
-    const updatedThread = { ...thread, ...updates, updatedAt: Date.now() };
-    const newThreads = new Map(state.threads);
-    newThreads.set(threadId, updatedThread as Thread);
-    return { threads: newThreads };
-  }),
+      const updatedThread = {
+        ...thread,
+        ...updates,
+        updatedAt: Date.now()
+      };
+
+      const newThreads = new Map(state.threads);
+      newThreads.set(threadId, updatedThread as Thread);
+      
+      return { 
+        ...state,
+        threads: newThreads
+      };
+    }),
 
   deleteThread: (threadId: string) => set((state) => {
     const newThreads = new Map(state.threads);

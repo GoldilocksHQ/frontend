@@ -103,14 +103,14 @@ export class ConnectorManager extends Manager {
     for (const connector of allConnectors) {
       const isActivated = activatedConnectors.some(ac => ac.id === connector.id);
       const activated_connector = activatedConnectors.filter(ac => ac.id === connector.id)[0];
-      const isAuthenticated = activated_connector.status === "active";
+      const isAuthenticated = activated_connector ? activated_connector.status === "active" : false;
       
       // Register connector
       const connectorId = connector.id as string;
       this.connectors.set(connectorId, {
         id: connector.id as string,
         name: connector.name,
-        displayName: connector.name,
+        displayName: connector.displayName,
         description: connector.description,
         toolDefinitions: [], // Will be populated by loadToolDefinitions
         metadata: connector.metadata,
@@ -344,6 +344,44 @@ export class ConnectorManager extends Manager {
     }
   }
 
+  async exchangeToken(connectorId: string, publicToken: string): Promise<void> {
+    try {
+      const connector = this.connectors.get(connectorId);
+      if (!connector) {
+        throw new Error(`Connector not found: ${connectorId}`);
+      }
+
+      const apiKey = await this.apiKeyManager.getKey();
+      const response = await fetch('/api/connectors/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          connectorName: connector.name,
+          publicToken: publicToken,
+          userId: this.apiKeyManager.getUserId(),
+          action: 'exchange-token'
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to exchange token');
+      }
+
+      return await response.json();
+    } catch (error) {
+      this.errorManager.logError(error as Error, {
+        source: this.name,
+        severity: ErrorSeverity.HIGH,
+        metadata: { publicToken }
+      });
+      throw error;
+    }
+  }
+
   async disconnect(connectorId: string): Promise<void> {
     try {
       const connector = this.connectors.get(connectorId);
@@ -389,6 +427,10 @@ export class ConnectorManager extends Manager {
 
   getConnector(connectorId: string): Connector | undefined {
     return this.connectors.get(connectorId);
+  }
+
+  getConnectorByName(connectorName: string): Connector | undefined {
+    return Array.from(this.connectors.values()).find(c => c.name === connectorName);
   }
 
   getConnectors(): Connector[] {

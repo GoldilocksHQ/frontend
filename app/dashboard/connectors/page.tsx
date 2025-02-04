@@ -2,12 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { Connector, ConnectorManager } from "@/lib/managers/connector-manager";
 import path from "path";
 import { Loader2 } from "lucide-react";
-
+import { PlaidLinkError,  usePlaidLink } from 'react-plaid-link';
 export default function ConnectorsPage() {
   const [connectors, setConnectors] = useState<Array<Connector & { isConnected: boolean, isAuthenticated: boolean }>>([]);
   const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null);
@@ -15,6 +15,7 @@ export default function ConnectorsPage() {
   const [error, setError] = useState<string | null>(null);
   const logoPath = path.join("../../", "logos");
   const [connectorManager, setConnectorManager] = useState<ConnectorManager | null>(null);
+  const [plaidToken, setPlaidToken] = useState<string | null>(null);
 
   useEffect(() => {
     initializeConnectors();
@@ -46,7 +47,33 @@ export default function ConnectorsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  const onSuccess = useCallback((publicToken: string) => {
+    const connector = connectorManager?.getConnectorByName('plaid');
+    if (connector) {
+      connectorManager?.exchangeToken(connector.id, publicToken);
+    }
+  }, [connectorManager]);
+
+  const onExit = useCallback((error: PlaidLinkError | null) => {
+    if (error?.error_code === 'INVALID_LINK_TOKEN') {
+      setPlaidToken(null);
+    }
+  }, []);
+
+  const { open, ready } = usePlaidLink({
+    token: plaidToken,
+    onSuccess,
+    onExit,
+    onEvent: (eventName) => console.log('Plaid event:', eventName)
+  }); 
+
+  useEffect(() => {
+    if (plaidToken && ready) {
+      open();
+    }
+  }, [plaidToken, ready, open]);
 
   const handleConnect = async (connector: Connector & { isConnected: boolean }) => {
     setError(null);
@@ -58,8 +85,12 @@ export default function ConnectorsPage() {
         throw new Error(response.error);
       }
 
-      if (response?.authUrl) {
-        window.location.href = response.authUrl;
+      if (connector.name = "plaid"){
+        setPlaidToken(response?.authUrl || null);
+      } else {
+        if (response?.authUrl) {
+          window.location.href = response.authUrl;
+        }
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to connect');

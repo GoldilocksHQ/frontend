@@ -7,28 +7,46 @@ import { AgentConfigSidebar } from "./components/agent-config-sidebar";
 import { ChatInterface } from "./components/chat-interface";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
-import { LoadingState, LoadingWrapper } from "@/app/components/common/loading-state";
+import {
+  LoadingState,
+  LoadingWrapper,
+} from "@/app/components/common/loading-state";
 import { AgentManager } from "@/lib/managers/agent-manager";
 import { ConversationManager } from "@/lib/managers/conversation-manager";
 import { useStores } from "@/lib/stores";
 import { ConnectorManager } from "@/lib/managers/connector-manager";
-import { Interaction, InteractionStatus, InteractionType, Message, MessageRole } from "@/lib/core/thread";
+import {
+  Interaction,
+  InteractionStatus,
+  InteractionType,
+  Message,
+  MessageRole,
+} from "@/lib/core/thread";
+import { ErrorBoundary } from "@/app/components/common/error-boundary";
 
 export default function PlaygroundPage() {
   const { uiState: ui, agentState: agent } = useStores();
   const [, setConnectorManager] = useState<ConnectorManager | null>(null);
   const [agentManager, setAgentManager] = useState<AgentManager | null>(null);
-  const [conversationManager, setConversationManager] = useState<ConversationManager | null>(null);
+  const [conversationManager, setConversationManager] =
+    useState<ConversationManager | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [interactionHistory, setInteractionHistory] = useState<Interaction[]>([]);
-
+  const [interactionHistory, setInteractionHistory] = useState<Interaction[]>(
+    []
+  );
+  const [isMounted, setIsMounted] = useState(true);
   const { toast } = useToast();
 
   // Initialize Managers
   useEffect(() => {
+    const abortController = new AbortController();
+    setIsMounted(true);
+
     const initializeManagers = async () => {
       try {
+        if (!isMounted) return;
+
         ui.setLoading(true);
 
         // Reset working state on mount
@@ -39,47 +57,64 @@ export default function PlaygroundPage() {
         const connectorMgr = ConnectorManager.getInstance();
         await connectorMgr.initialize();
         setConnectorManager(connectorMgr);
-        
-        const agentMgr = AgentManager.getInstance(connectorMgr.getToolManager());
+
+        const agentMgr = AgentManager.getInstance(
+          connectorMgr.getToolManager()
+        );
         await agentMgr.initialize();
         setAgentManager(agentMgr);
-        
+
         const conversationMgr = ConversationManager.getInstance();
         await conversationMgr.initialize();
         setConversationManager(conversationMgr);
 
         // setInteractionHistory(conversationMgr.getInteractionsByAgent(agent.selectedAgent?.id as string));
-
       } catch (error) {
-        console.error("Failed to initialize managers:", error);
-        toast({
-          title: "Error",
-          description: "Failed to initialize application managers",
-          variant: "destructive",
-        });
+        if (isMounted) {
+          console.error("Failed to initialize managers:", error);
+          toast({
+            title: "Error",
+            description: "Failed to initialize application managers",
+            variant: "destructive",
+          });
+        }
       } finally {
-        ui.setLoading(false);
+        if (isMounted) {
+          ui.setLoading(false);
+        }
       }
     };
 
     initializeManagers();
+
+    return () => {
+      setIsMounted(false);
+      abortController.abort();
+    };
   }, []);
 
   // Load messages when agent is selected
   useEffect(() => {
     if (agent.selectedAgent && conversationManager) {
       // Get all messages for this agent
-      const agentInteractions = conversationManager.getInteractionsByAgent(agent.selectedAgent.id);
+      const agentInteractions = conversationManager.getInteractionsByAgent(
+        agent.selectedAgent.id
+      );
       const messageHistory = agentInteractions
-        .filter(interaction => 
-          interaction.type === InteractionType.MESSAGE &&
-          (interaction as Message).content !== ""
+        .filter(
+          (interaction) =>
+            interaction.type === InteractionType.MESSAGE &&
+            (interaction as Message).content !== ""
         )
         .sort((a, b) => a.createdAt - b.createdAt) as Message[];
-      
-      const agentThreads = conversationManager.getThreadsByAgent(agent.selectedAgent?.id as string);
-      const agentThreadsInteractions = agentThreads.flatMap(thread => thread.interactions).sort((a, b) => a.createdAt - b.createdAt);
-        
+
+      const agentThreads = conversationManager.getThreadsByAgent(
+        agent.selectedAgent?.id as string
+      );
+      const agentThreadsInteractions = agentThreads
+        .flatMap((thread) => thread.interactions)
+        .sort((a, b) => a.createdAt - b.createdAt);
+
       setMessages(messageHistory);
       setInteractionHistory(agentThreadsInteractions);
     } else {
@@ -93,7 +128,7 @@ export default function PlaygroundPage() {
       toast({
         title: "Error",
         description: "Agent manager not initialized",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -106,7 +141,7 @@ export default function PlaygroundPage() {
         chainType: agentManager.getAvailableChainTypes()[0],
         modelName: agentManager.getAvailableModels()[0].name,
         toolIds: [],
-        linkedAgentIds: []
+        linkedAgentIds: [],
       });
       toast({
         title: "Success",
@@ -115,8 +150,9 @@ export default function PlaygroundPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create new agent",
-        variant: "destructive"
+        description:
+          error instanceof Error ? error.message : "Failed to create new agent",
+        variant: "destructive",
       });
     }
   };
@@ -126,14 +162,16 @@ export default function PlaygroundPage() {
       toast({
         title: "Error",
         description: "Please select an agent first",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
 
     try {
       // Create a new thread for this message
-      const threadId = await conversationManager.createThread(agent.selectedAgent.id);
+      const threadId = await conversationManager.createThread(
+        agent.selectedAgent.id
+      );
 
       // Create and add user message immediately
       const userMessage: Message = {
@@ -145,9 +183,9 @@ export default function PlaygroundPage() {
         targetAgentId: agent.selectedAgent.id,
         status: InteractionStatus.PENDING,
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
       };
-      setMessages(prev => [...prev, userMessage]);
+      setMessages((prev) => (isMounted ? [...prev, userMessage] : prev));
       setInput(""); // Clear input immediately after showing message
 
       // Start processing
@@ -163,24 +201,27 @@ export default function PlaygroundPage() {
 
       // Update messages with the agent's response
       const thread = conversationManager.getThread(threadId);
-      if (thread) {
-        const agentMessages = thread.messages.filter(m => 
-          m.role === MessageRole.ASSISTANT);
-        setMessages(prev => [...prev, ...agentMessages]);
+      if (thread && isMounted) {
+        const agentMessages = thread.messages.filter(
+          (m) => m.role === MessageRole.ASSISTANT
+        );
+        setMessages((prev) => [...prev, ...agentMessages]);
 
-        const agentThreads = conversationManager.getThreadsByAgent(agent.selectedAgent?.id as string);
-        const agentThreadsInteractions = agentThreads.flatMap(thread => thread.interactions).sort((a, b) => a.createdAt - b.createdAt);
+        const agentThreads = conversationManager.getThreadsByAgent(
+          agent.selectedAgent?.id as string
+        );
+        const agentThreadsInteractions = agentThreads.flatMap(thread => thread.interactions)
+          .sort((a, b) => a.createdAt - b.createdAt);
         setInteractionHistory(agentThreadsInteractions);
       }
-
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to send message",
-        variant: "destructive"
+        description:
+          error instanceof Error ? error.message : "Failed to send message",
+        variant: "destructive",
       });
     } finally {
-      
       ui.setWorking(false);
       ui.setWorkingStatus("");
     }
@@ -188,8 +229,8 @@ export default function PlaygroundPage() {
 
   if (ui.isLoading || !agentManager || !conversationManager) {
     return (
-      <LoadingState 
-        message="Initializing managers..." 
+      <LoadingState
+        message="Initializing managers..."
         className="min-h-screen"
       />
     );
@@ -236,27 +277,29 @@ export default function PlaygroundPage() {
         </LoadingWrapper>
       </div>
 
-      <div className="flex-1 flex overflow-hidden  max-w-[calc(100vw-15rem)]">
+      <div className="flex-1 flex overflow-hidden max-w-[calc(100vw-15rem)]">
         {agent.selectedAgent ? (
-          <>
+          <div className="flex-1 flex overflow-hidden">
             <div className="flex-1 flex flex-col overflow-hidden">
-              <ChatInterface
-                interfaceMessages={messages}
-                fullInteractionHistory={interactionHistory}
-                onSendMessage={handleSend}
-                isWorking={ui.isWorking}
-                workingStatus={ui.workingStatus}
-                input={input}
-                setInput={setInput}
+              <ErrorBoundary>
+                <ChatInterface
+                  interfaceMessages={messages}
+                  fullInteractionHistory={interactionHistory}
+                  onSendMessage={handleSend}
+                  isWorking={ui.isWorking}
+                  workingStatus={ui.workingStatus}
+                  input={input}
+                  setInput={setInput}
+                  agentManager={agentManager}
+                  />
+              </ErrorBoundary>
+            </div>
+              <AgentConfigSidebar
+                agent={agent.selectedAgent}
+                errors={ui.errors}
                 agentManager={agentManager}
               />
-            </div>
-            <AgentConfigSidebar 
-              agent={agent.selectedAgent}
-              errors={ui.errors}
-              agentManager={agentManager}
-            />
-          </>
+          </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             Select an agent to start chatting

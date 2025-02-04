@@ -3,6 +3,7 @@ import { AgentManager } from "@/lib/managers/agent-manager";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useEffect, useRef, useState } from "react";
 import React from "react";
+import { Virtuoso } from "react-virtuoso";
 
 interface InteractionHistoryProps {
   fullInteractionHistory: Interaction[];
@@ -19,6 +20,7 @@ export function InteractionHistory({
 }: InteractionHistoryProps) {
   const [selectedType, setSelectedType] = useState<InteractionType | 'all'>('all');
   const [expandedInteractionId, setExpandedInteractionId] = useState<string | null>(null);
+  const [lastExpandedId, setLastExpandedId] = useState<string | null>(null);
 
   const filteredInteractions = fullInteractionHistory.filter(interaction =>
     selectedType === 'all' ? true : interaction.type === selectedType
@@ -31,6 +33,17 @@ export function InteractionHistory({
       messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
     }
   }, [isHistoryOpen, filteredInteractions]);
+
+  useEffect(() => {
+    if(expandedInteractionId && expandedInteractionId !== lastExpandedId) {
+      setLastExpandedId(expandedInteractionId);
+      // Auto-collapse after 2 minutes
+      const timer = setTimeout(() => {
+        setExpandedInteractionId(null);
+      }, 300_000);
+      return () => clearTimeout(timer);
+    }
+  }, [expandedInteractionId]);
 
   const formatInteractionContent = (interaction: Interaction) => {
     try {
@@ -111,14 +124,14 @@ export function InteractionHistory({
       }
   
       const formattedJson = JSON.stringify(content, null, 2)
-        .replace(/[{]/g, '<span class="text-slate-600">{</span>')
-        .replace(/[}]/g, '<span class="text-slate-600">}</span>')
-        .replace(/[[\]]/g, (match) => `<span class="text-slate-600">${match}</span>`)
-        .replace(/"([^"]+)":/g, '<span class="text-indigo-600">"$1"</span>:')
-        .replace(/: "([^"]+)"/g, ': <span class="text-emerald-600">"$1"</span>')
-        .replace(/: (true|false|null|\d+)/g, ': <span class="text-amber-600">$1</span>');
-  
-      return <div dangerouslySetInnerHTML={{ __html: formattedJson }} />;
+        .replace(/{/g, '<span class="text-muted-foreground">{</span>')
+        .replace(/}/g, '<span class="text-muted-foreground">}</span>')
+        .replace(/[\[\]]/g, (match) => `<span class="text-muted-foreground">${match}</span>`)
+        .replace(/"([^"]+)":/g, '<span class="text-primary">"$1"</span>:')
+        .replace(/: ("[^"]*"|\d+|true|false|null)/g, (_, value) => 
+          `: <span class="${value.startsWith('"') ? 'text-chart-2' : 'text-chart-5'}">${value}</span>`
+        );
+      return <pre dangerouslySetInnerHTML={{ __html: formattedJson }} />;
     } catch (error) {
       return `Error formatting content: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
@@ -171,6 +184,15 @@ export function InteractionHistory({
     );
   };
 
+  const VirtuosoList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
+    function VirtuosoList(props, ref) {
+      return (
+        <div ref={ref} {...props} className="space-y-4 pt-4">
+          {props.children}
+        </div>
+      );
+    }
+  );
 
   return (
     <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
@@ -198,54 +220,61 @@ export function InteractionHistory({
 
         {/* Interactions List */}
         <div className="flex-1 overflow-y-auto space-y-4 pt-4">
-          {filteredInteractions.map((interaction) => (
-            <div
-              key={interaction.id}
-              className="bg-muted/50 p-4 rounded-lg space-y-2 max-w-[calc(60vw-3rem)]"
-            >
-              {/* Header with expand/collapse */}
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">
-                    {interaction.sourceAgentId ? 
-                      agentManager.getAgent(interaction.sourceAgentId)?.name || interaction.sourceAgentId 
-                      : "You"} 
-                    {"->"}
-                    {interaction.targetAgentId ? 
-                      agentManager.getAgent(interaction.targetAgentId)?.name || interaction.targetAgentId 
-                      : "You"}
-                  </p>
-                  <div className="text-xs text-muted-foreground">
-                    <span>Type: {interaction.type}</span>
-                    <span className="mx-2">•</span>
-                    <span>
-                      {new Date(interaction.createdAt).toLocaleString()}
-                    </span>
+          <Virtuoso
+            data={filteredInteractions}
+            initialTopMostItemIndex={filteredInteractions.length - 1}
+            itemContent={(index, interaction) => (
+              <div
+                key={interaction.id}
+                className="bg-muted/50 p-4 rounded-lg space-y-2 max-w-[calc(60vw-3rem)]"
+              >
+                {/* Header with expand/collapse */}
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">
+                      {interaction.sourceAgentId ? 
+                        agentManager.getAgent(interaction.sourceAgentId)?.name || interaction.sourceAgentId 
+                        : "You"} 
+                      {"->"}
+                      {interaction.targetAgentId ? 
+                        agentManager.getAgent(interaction.targetAgentId)?.name || interaction.targetAgentId 
+                        : "You"}
+                    </p>
+                    <div className="text-xs text-muted-foreground">
+                      <span>Type: {interaction.type}</span>
+                      <span className="mx-2">•</span>
+                      <span>
+                        {new Date(interaction.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setExpandedInteractionId(
+                      expandedInteractionId === interaction.id ? null : interaction.id
+                    )}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {expandedInteractionId === interaction.id ? '▼' : '▶'}
+                  </button>
+                </div>
+
+                {/* Collapsible Content */}
+                <div className={`overflow-hidden transition-all ${
+                  expandedInteractionId === interaction.id 
+                    ? 'opacity-100' 
+                    : 'max-h-0 opacity-0'
+                }`}>
+                  <div className="pt-2 text-sm font-mono whitespace-pre-wrap break-words 
+                    overflow-x-auto bg-background/50 p-2 rounded">
+                    {formatInteractionContent(interaction)}
                   </div>
                 </div>
-                <button 
-                  onClick={() => setExpandedInteractionId(
-                    expandedInteractionId === interaction.id ? null : interaction.id
-                  )}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {expandedInteractionId === interaction.id ? '▼' : '▶'}
-                </button>
               </div>
-
-              {/* Collapsible Content */}
-              <div className={`overflow-hidden transition-all ${
-                expandedInteractionId === interaction.id 
-                  ? 'opacity-100' 
-                  : 'max-h-0 opacity-0'
-              }`}>
-                <div className="pt-2 text-sm font-mono whitespace-pre-wrap break-words 
-                  overflow-x-auto bg-background/50 p-2 rounded">
-                  {formatInteractionContent(interaction)}
-                </div>
-              </div>
-            </div>
-          ))}
+            )}
+            components={{
+              List: VirtuosoList
+            }}
+          />
         </div>
       </DialogContent>
     </Dialog>

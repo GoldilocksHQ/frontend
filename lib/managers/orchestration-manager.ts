@@ -301,7 +301,7 @@ export class OrchestrationManager extends Manager {
     plan: Plan,
     thread: Thread,
     fromUser: boolean
-  ): Promise<void> {
+  ): Promise<Interaction> {
     const judgementAgent = await this.createJudgementAgent(thread);
     const previousTasks: string[] = [];
     for (const task of plan.tasks) {
@@ -314,11 +314,12 @@ export class OrchestrationManager extends Manager {
       plan.sourceAgentId,
       fromUser ? undefined : plan.targetAgentId
     ) as Message;
-    thread.appendMessageConstruction(
+    const outputMessage = thread.appendMessageConstruction(
       summaryMessage,
       MessageRole.ASSISTANT,
       summary
-    );
+    ) as Message;
+    return outputMessage;
   }
 
   private async executeTask(
@@ -352,22 +353,36 @@ export class OrchestrationManager extends Manager {
           );
 
           newResult =  result as ChainExecutionResult
-
           if (chainInteraction.type === InteractionType.TOOL_CALL) {
             (newResult as ChainExecutionResult).result = { 
               ...(result.result as AgentToolCall), 
-              output: JSON.stringify((chainInteraction as ToolCall).result, null, 2)
+              output: JSON.stringify((
+                chainInteraction as ToolCall).result, 
+                null, 
+                2
+              )
             }
+          } else if (chainInteraction.type === InteractionType.PLAN) {
+            // If the chain interaction is a plan, execute the plan
+            const outputMessage = await this.executePlan(chainInteraction as Plan, thread, false);
+            (newResult as ChainExecutionResult).result = JSON.stringify({
+              goal: (chainInteraction as Plan).goal,
+              tasks: (chainInteraction as Plan).tasks,
+              output: (outputMessage as Message).content,
+            }, null, 2)
           } else {
-            (newResult as ChainExecutionResult).result = chainInteraction.type === InteractionType.PLAN ? JSON.stringify({goal: (chainInteraction as Plan).goal, tasks: (chainInteraction as Plan).tasks }, null, 2)
-            : chainInteraction.type === InteractionType.JUDGEMENT ? JSON.stringify({satisfied: (chainInteraction as Judgement).satisfied, feedback: (chainInteraction as Judgement).feedback}, null, 2)
+            (newResult as ChainExecutionResult).result = chainInteraction.type === InteractionType.JUDGEMENT ? JSON.stringify({satisfied: (chainInteraction as Judgement).satisfied, feedback: (chainInteraction as Judgement).feedback}, null, 2)
             : chainInteraction.type === InteractionType.MESSAGE ? JSON.stringify({content: (chainInteraction as Message).content}, null, 2)
             : "No previous results"
           }
 
           // Execute the judgement chain
           const judgementInteraction = await this.executeJudgement(
-            judgementAgent, newResult as ChainExecutionResult, thread, task);
+            chainInteraction.type,
+            judgementAgent,
+            newResult as ChainExecutionResult,
+            thread,
+            task);
           
           if (judgementInteraction.satisfied) {
             resultApproved = true;
@@ -404,7 +419,6 @@ export class OrchestrationManager extends Manager {
           Current Task: ${task.instruction}
         ` + (missing ? `Missing: ${missing.map((m) => "["+m+"]").join(", ")}` : "");
         const decodedTaskMessage = decodeURIComponent(taskMessage);
-        // const input = this.chainInputStrategies[ChainType.TASK_EXECUTION](decodedTaskMessage);
         return decodedTaskMessage;
       },
 
@@ -460,10 +474,17 @@ export class OrchestrationManager extends Manager {
     return judgementAgent;
   }
   
-  private async executeJudgement(judgementAgent: Agent, result: ChainExecutionResult, thread: Thread, task: Task): Promise<Judgement> {
-    const judgementInput = `Does the result fulfil the instruction?
-      Instruction: ${JSON.stringify(task.instruction, null, 2)}
-      Result: ${JSON.stringify(result.result, null, 2)}`
+  private async executeJudgement(type: InteractionType, judgementAgent: Agent, result: ChainExecutionResult, thread: Thread, task: Task): Promise<Judgement> {
+    let judgementInput = "";
+    if (type === InteractionType.PLAN){
+      judgementInput = `Is the plan directly and comprehensively addressing the task in instruction?
+        Instruction: ${JSON.stringify(task.instruction, null, 2)}
+        Plan: ${JSON.stringify(result.result, null, 2)}`
+    } else {
+      judgementInput = `Does the result fulfil the instruction?
+        Instruction: ${JSON.stringify(task.instruction, null, 2)}
+        Result: ${JSON.stringify(result.result, null, 2)}`  
+    }
     const judgementResult = await this.handleChainExecution(thread, judgementInput, judgementAgent);
     const judgementInteraction = await this.handleChainResult(
       judgementResult,

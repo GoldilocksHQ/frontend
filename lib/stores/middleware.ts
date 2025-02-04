@@ -45,8 +45,9 @@ export const logMiddleware: LogMiddleware = (config) => (set, get, api) =>
   config(
     (state) => {
       console.log('  applying', state);
-      set(state);
+      const result = set(state);
       console.log('  new state', get());
+      return result;
     },
     get,
     api

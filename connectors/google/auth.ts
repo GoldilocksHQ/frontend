@@ -1,7 +1,7 @@
 
 import { type Credentials as GoogleCredentials, OAuth2Client } from 'google-auth-library';
-import { storeCredentials, getCredentials, type Credentials as SupabaseCredentials, tokenExists, updateCredentials, setTokenInvalid } from '../../services/supabase/server';
-import { isTokenExpired } from '@/lib/utils';
+import { storeCredentials, getCredentials, tokenExists, updateCredentials, setTokenInvalid } from '../../services/supabase/server';
+import { isTokenExpired, constructCredentials } from '../utils';
 import { UUID } from 'crypto';
 
 
@@ -15,17 +15,6 @@ const SCOPES = {
   "google-drive": ['https://www.googleapis.com/auth/drive'],
   "google-sheets": ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
   "google-docs": ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/documents'],
-}
-
-export async function constructCredentials(userId: UUID, tokenName: string, tokenType: string, token?: string, createdAt?: string, expiresAt?: string): Promise<SupabaseCredentials> {
-  return {
-    userId: userId,
-    tokenName: tokenName,
-    tokenType: tokenType,
-    token: token || "",
-    createdAt: createdAt || new Date().toISOString(),
-    expiresAt: expiresAt ? new Date().toISOString() : undefined
-  };
 }
 
 export async function createOAuth2Client(): Promise<OAuth2Client> {

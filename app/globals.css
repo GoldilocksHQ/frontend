@@ -89,4 +89,10 @@ body {
   p, span, div {
     @apply font-sans;
   }
+  
+  .json-key { color: #818cf8; }
+  .json-string { color: #22c55e; }
+  .json-number { color: #f59e0b; }
+  .json-boolean { color: #f59e0b; }
+  .json-brace { color: #94a3b8; }
 }
