@@ -49,7 +49,7 @@ export interface AgentToolCall {
   execution: {
     connectorName: string;
     functionName: string;
-    parameters: Record<string, unknown>;
+    parameters?: Record<string, unknown>;
   };
   output?: string;
 }
@@ -365,7 +365,7 @@ export class Thread extends ThreadEntity {
   ): ToolCall {
     (interaction as ToolCall).toolName = toolCall.execution.connectorName;
     (interaction as ToolCall).functionName = toolCall.execution.functionName;
-    (interaction as ToolCall).parameters = toolCall.execution.parameters;
+    (interaction as ToolCall).parameters = toolCall.execution.parameters || {};
     return interaction as ToolCall;
   }
 

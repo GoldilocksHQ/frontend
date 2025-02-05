@@ -29,7 +29,7 @@ const responseSchema = z.object({
   execution: z.object({
     connectorName: z.string().describe("Name of the connector to use, must not be blank"),
     functionName: z.string().describe("Name of the function to call, must not be blank"),
-    parameters: z.record(z.any()).describe("Parameters matching the function's schema, must not be blank")
+    parameters: z.record(z.any()).default({}).describe("Parameters matching the function's schema, must not be blank")
   }).required()
   
   // .optional()

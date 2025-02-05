@@ -18,7 +18,7 @@ export async function getAuthUrl(userId: UUID) {
 }
 
 // Set up the Plaid client
-async function createPlaidClient(): Promise<PlaidApi> {
+export async function createPlaidClient(): Promise<PlaidApi> {
   const plaidConfig = new Configuration({
     basePath: PlaidEnvironments['sandbox'],
     baseOptions: {
@@ -33,14 +33,14 @@ async function createPlaidClient(): Promise<PlaidApi> {
   return plaidClient;
 }
 
-async function createLinkToken(userId: string, plaidClient: PlaidApi): Promise<LinkTokenCreateResponse> {
+export async function createLinkToken(userId: string, plaidClient: PlaidApi): Promise<LinkTokenCreateResponse> {
   const linkTokenConfig: LinkTokenCreateRequest = {
     user: { client_user_id: userId },
     client_name: "Plaid Tutorial",
     language: "en",
     products: [Products.Auth],
     country_codes: [CountryCode.Gb],
-    webhook: "https://www.example.com/webhook",
+    webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/connectors/callback`,
   };
   const tokenResponse = await plaidClient.linkTokenCreate(linkTokenConfig as LinkTokenCreateRequest);
   const tokenData = tokenResponse.data;

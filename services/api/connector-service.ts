@@ -2,8 +2,9 @@ import { queryDatabase } from "../supabase/server";
 import { handleFunction as handleGoogleSheetsFunction } from "@/connectors/google-sheets/connector";
 import { handleFunction as handleGoogleDriveFunction } from "@/connectors/google-drive/connector";
 import { handleFunction as handleGoogleDocsFunction } from "@/connectors/google-docs/connector";
+import { handleFunction as handlePlaidFunction } from "@/connectors/plaid/connector";
 import { UUID } from "crypto";
-import { googleDriveToolDefinition, googleDocsToolDefinition, googleSheetsToolDefinition } from "@/connectors/function-schema";
+import { googleDriveToolDefinition, googleDocsToolDefinition, googleSheetsToolDefinition, plaidToolDefinition } from "@/connectors/function-schema";
 import { ToolDefinition, APIError } from "./agent-service";
 
 export interface ConnectorFunction {
@@ -63,11 +64,13 @@ export class ConnectorService {
             return googleDriveToolDefinition;
           case 'google-docs':
             return googleDocsToolDefinition;
+          case 'plaid':
+            return plaidToolDefinition;
           default:
             throw new APIError(
               `Unknown connector: ${connectorName}`,
               400,
-              { availableConnectors: ['google-sheets', 'google-drive', 'google-docs'] }
+              { availableConnectors: ['google-sheets', 'google-drive', 'google-docs', 'plaid'] }
             );
         }
       });
@@ -90,6 +93,8 @@ export class ConnectorService {
         return handleGoogleDriveFunction(userId, func.function, func.arguments);
       case 'google-docs':
         return handleGoogleDocsFunction(userId, func.function, func.arguments);
+      case 'plaid':
+        return handlePlaidFunction(userId, func.function); // TODO: Add arguments
       default:
         throw new Error(`Unknown connector: ${func.connector}`);
     }

@@ -514,3 +514,26 @@ export const googleDocsToolDefinition: ToolDefinition = {
     },
   ],
 };
+
+export const plaidToolDefinition: ToolDefinition = {
+  connectorName: "plaid",
+  functions: [
+    {
+      name: "getAccounts",
+      description: "Get accounts from Plaid",
+      parameters: {},
+      responseSchema: {
+        type: "json_schema",
+        json_schema: {
+          name: "get_accounts_response",
+          schema: {
+            type: "object",
+            properties: {
+              accounts: { type: "array" },
+            },
+          },
+        },
+      },
+    },
+  ],
+};
