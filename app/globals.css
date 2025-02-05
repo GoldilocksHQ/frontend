@@ -89,10 +89,17 @@ body {
   p, span, div {
     @apply font-sans;
   }
-  
-  .json-key { color: #818cf8; }
+  /* .json-key { color: #818cf8; }
   .json-string { color: #22c55e; }
   .json-number { color: #f59e0b; }
   .json-boolean { color: #f59e0b; }
-  .json-brace { color: #94a3b8; }
+  .json-brace { color: #94a3b8; } */
 }
+
+/* Smooth transitions for transform and opacity */
+.transition-transform {
+  transition-property: transform, opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
+}
+

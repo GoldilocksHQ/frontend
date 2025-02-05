@@ -22,12 +22,14 @@ import { ThreadStatus } from "../core/thread";
 import { ChainConfig, ChainExecutionResult, ChainType } from "./chain-manager";
 import { Agent } from "./agent-manager";
 import { models } from "./chain-manager";
+import { useUIStore, type UIState } from "../stores/ui-store";
 
 export class OrchestrationManager extends Manager {
   private static instance: OrchestrationManager | null = null;
   private errorManager: ErrorManager;
   private agentManager: AgentManager;
   private chainManager: ChainManager;
+  private uiState: UIState;
 
   // Handler registry pattern
   private interactionHandlers = {
@@ -77,6 +79,7 @@ export class OrchestrationManager extends Manager {
     this.errorManager = ErrorManager.getInstance();
     this.agentManager = AgentManager.getInstance();
     this.chainManager = ChainManager.getInstance();
+    this.uiState = useUIStore.getState();
   }
 
   static getInstance(): OrchestrationManager {
@@ -304,7 +307,19 @@ export class OrchestrationManager extends Manager {
   ): Promise<Interaction> {
     const judgementAgent = await this.createJudgementAgent(thread);
     const previousTasks: string[] = [];
+    
+    // Send initial plan goal
+    this.uiState.setWorkingStatus(
+      `Start Executing Plan: ${plan.goal}\n`
+    );
+
+    // Execute the tasks in order
     for (const task of plan.tasks) {
+      // Update status with current task
+      this.uiState.appendWorkingStatus(
+        `Processing Task ${task.step}: ${task.instruction}\n`
+      );
+
       previousTasks.push(await this.executeTask(task, plan, thread, previousTasks, judgementAgent));
     }
 
@@ -331,6 +346,8 @@ export class OrchestrationManager extends Manager {
   ): Promise<string> {
     const executor = this.createTaskExecutor();
     try {
+      task.status = InteractionStatus.IN_PROGRESS;
+
       const agent = executor.validateTask(task);
 
       let missing: string[] = [];
@@ -560,7 +577,6 @@ export class OrchestrationManager extends Manager {
     return errorInteraction;
   }
 }
-
 
 
 
@@ -1006,3 +1022,4 @@ export class OrchestrationManager extends Manager {
 //     }
 //   }
 // }
+

@@ -16,7 +16,7 @@ interface ChatInterfaceProps {
   input: string;
   setInput: (input: string) => void;
   isWorking: boolean;
-  workingStatus: string;
+  workingStatus: string[];
   onSendMessage: (message: string) => Promise<void>;
   agentManager: AgentManager;
 }
@@ -35,12 +35,17 @@ export function ChatInterface({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }, 50); // Small delay to ensure DOM update
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [interfaceMessages, isWorking]);
+  }, [interfaceMessages, isWorking, workingStatus]);
 
   return (
     <div className="flex flex-col h-full">
@@ -75,28 +80,32 @@ export function ChatInterface({
               <div className="pt-2">
                 {isWorking && (
                   <div className="flex justify-start">
-                    <div className="flex items-center gap-2 max-w-[80%] rounded-lg px-4 py-2 bg-muted text-xs text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>{workingStatus || "Thinking..."}</span>
+                    <div className="max-w-[80%] space-y-1 text-xs text-muted-foreground">
+                      {workingStatus.map((status, index) => (
+                        <div 
+                          key={index}
+                          className="flex items-center gap-2 animate-fade-in-up"
+                          style={{ 
+                            transitionDelay: `${index * 50}ms` 
+                          }}
+                        >
+                          {index === workingStatus.length - 1 && (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          )}
+                          <div className="opacity-75">
+                            {status}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
-            ),
+            )
           }}
         />
-        {/* {isWorking && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 max-w-[80%] rounded-lg px-4 py-2 bg-muted text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>{workingStatus || "Thinking..."}</span>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />*/}
       </div>
-
       <div className="border-t p-4">
         <form
           onSubmit={(e) => {

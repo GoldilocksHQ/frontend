@@ -185,6 +185,10 @@ export default function PlaygroundPage() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
+      
+      // Clear previous statuses
+      ui.clearWorkingStatus();
+
       setMessages((prev) => (isMounted ? [...prev, userMessage] : prev));
       setInput(""); // Clear input immediately after showing message
 

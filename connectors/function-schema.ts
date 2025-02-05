@@ -156,7 +156,7 @@ export const googleDriveToolDefinition: ToolDefinition = {
   functions: [
     {
       name: "listFiles",
-      description: "List files and folders in Google Drive with optional filtering and pagination",
+      description: "List files and folders in Google Drive with optional filtering and pagination. You can filter by mimeType, name, parent folder id, and more.",
       parameters: {
         type: "object",
         properties: {
