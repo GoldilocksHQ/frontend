@@ -38,7 +38,7 @@ export async function createLinkToken(userId: string, plaidClient: PlaidApi): Pr
     user: { client_user_id: userId },
     client_name: "Plaid Tutorial",
     language: "en",
-    products: [Products.Auth],
+    products: [Products.Auth, Products.Identity, Products.Signal],
     country_codes: [CountryCode.Gb],
     webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/connectors/callback`,
   };

@@ -94,7 +94,7 @@ export class ConnectorService {
       case 'google-docs':
         return handleGoogleDocsFunction(userId, func.function, func.arguments);
       case 'plaid':
-        return handlePlaidFunction(userId, func.function); // TODO: Add arguments
+        return handlePlaidFunction(userId, func.function, func.arguments);
       default:
         throw new Error(`Unknown connector: ${func.connector}`);
     }

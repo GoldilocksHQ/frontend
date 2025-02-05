@@ -456,7 +456,7 @@ export class OrchestrationManager extends Manager {
     }
     const result = await executor(
       toolCall.execution.functionName,
-      toolCall.execution.parameters
+      toolCall.execution.parameters || {}
     );
     return result;
   }

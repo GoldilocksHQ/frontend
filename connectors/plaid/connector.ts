@@ -9,14 +9,16 @@ const CONNECTOR_NAME = "plaid";
 
 // Define types for function arguments and results
 
-// type FunctionArgs = {
-//   accessToken: string;
-// };
+type FunctionArgs = {
+  accountId?: string;
+  clientTransactionId?: string;
+  amount?: number;
+};
 
 export async function handleFunction(
   userId: UUID,
   functionName: string,
-  // args: FunctionArgs
+  args: FunctionArgs
 ): Promise<FunctionResult<unknown>> {
   const plaidClient = await createPlaidClient();
   const accessToken = await getAccessToken(userId);
@@ -29,6 +31,25 @@ export async function handleFunction(
           return { success: false, result: null, error: "No valid access token" };
         }
         return await getAccounts(plaidClient, accessToken);
+      case 'getIdentity':
+        if (!accessToken) {
+          return { success: false, result: null, error: "No valid access token" };
+        }
+        return await getIdentity(plaidClient, accessToken);
+      case 'evaluateSignal':
+        if (!accessToken) {
+          return { success: false, result: null, error: "No valid access token" };
+        }
+        if (!args.accountId) {
+          return { success: false, result: null, error: "No account ID provided" };
+        }
+        if (!args.clientTransactionId) {
+          args.clientTransactionId = crypto.randomUUID();
+        }
+        if (!args.amount) {
+          return { success: false, result: null, error: "No amount provided" };
+        }
+        return await evaluateSignal(plaidClient, accessToken, args.accountId, args.clientTransactionId, args.amount);
       default:
         return { success: false, result: null, error: `Unknown function: ${functionName}` };
     }
@@ -90,6 +111,24 @@ async function getAccounts(plaidClient: PlaidApi, accessToken: UUID): Promise<Fu
     return { success: true, result: accountData, error: undefined };
   } catch (error) {
     //handle error
+    return { success: false, result: null, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+async function getIdentity(plaidClient: PlaidApi, accessToken: UUID): Promise<FunctionResult<unknown>> {
+  try {
+    const response = await plaidClient.identityGet({ access_token: accessToken });
+    return { success: true, result: response.data, error: undefined };
+  } catch (error) {
+    return { success: false, result: null, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+async function evaluateSignal(plaidClient: PlaidApi, accessToken: UUID, accountId: string, clientTransactionId: string, amount: number): Promise<FunctionResult<unknown>> {
+  try {
+    const response = await plaidClient.signalEvaluate({ access_token: accessToken, account_id: accountId, client_transaction_id: clientTransactionId, amount: amount });
+    return { success: true, result: response.data, error: undefined };
+  } catch (error) {
     return { success: false, result: null, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
