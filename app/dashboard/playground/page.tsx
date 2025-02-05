@@ -104,7 +104,11 @@ export default function PlaygroundPage() {
         .filter(
           (interaction) =>
             interaction.type === InteractionType.MESSAGE &&
-            (interaction as Message).content !== ""
+            (interaction as Message).content !== "" &&
+            // either the message is a user message or an assistant message with no target agent id, i.e. to the user
+            ((interaction as Message).role == MessageRole.USER ||
+              ((interaction as Message).role == MessageRole.ASSISTANT &&
+                (interaction as Message).sourceAgentId == agent.selectedAgent!.id))
         )
         .sort((a, b) => a.createdAt - b.createdAt) as Message[];
 
@@ -185,7 +189,7 @@ export default function PlaygroundPage() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      
+
       // Clear previous statuses
       ui.clearWorkingStatus();
 
@@ -207,7 +211,8 @@ export default function PlaygroundPage() {
       const thread = conversationManager.getThread(threadId);
       if (thread && isMounted) {
         const agentMessages = thread.messages.filter(
-          (m) => m.role === MessageRole.ASSISTANT
+          (m) => m.role === MessageRole.ASSISTANT &&
+            m.sourceAgentId == agent.selectedAgent!.id
         );
         setMessages((prev) => [...prev, ...agentMessages]);
 

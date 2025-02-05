@@ -20,6 +20,7 @@ Given a task, you should:
 4. Ensure the steps are ordered correctly
 5. Validate that all requirements are covered
 6. Ensure the assigned agents are capable of completing the task
+7. If there are specialised planner agents, let them plan the tasks instead of yourself. You only need to provide them the goal and high level instructions.
 
 Task to plan: {input}
 

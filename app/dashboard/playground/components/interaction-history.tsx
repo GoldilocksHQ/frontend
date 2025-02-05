@@ -106,9 +106,10 @@ export function InteractionHistory({
               tool: toolCall.toolName,
               function: toolCall.functionName,
               parameters: toolCall.parameters,
+              error: toolCall.error,
               result: typeof toolCall.result === 'string' 
                 ? JSON.parse(toolCall.result)
-                : toolCall.result
+                : toolCall.result,
             };
           default:
             return interaction;

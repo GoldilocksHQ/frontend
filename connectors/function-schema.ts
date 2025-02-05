@@ -317,7 +317,7 @@ export const googleDriveToolDefinition: ToolDefinition = {
     },
     {
       name: "readFile",
-      description: "Read the content of a file from Google Drive",
+      description: "Read a file from Google Drive. Warning: Only files with binary content can be read.",
       parameters: {
         type: "object",
         properties: {

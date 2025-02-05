@@ -131,7 +131,9 @@ export class OrchestrationManager extends Manager {
 
       // If the result is a plan, execute it
       if (interaction.type === InteractionType.PLAN) {
-        await this.executePlan(interaction as Plan, thread, true);
+        const judgementAgent = await this.createJudgementAgent(thread);
+        const summaryAgent = await this.createSummaryAgent(thread);
+        await this.executePlan(interaction as Plan, thread, judgementAgent, summaryAgent, true);
       } else {
         this.finalizeInteraction(interaction, thread, true, initiatingAgent);
       }
@@ -199,16 +201,22 @@ export class OrchestrationManager extends Manager {
       targetAgent?.id
     ) as ToolCall;
     
+    try {
+    
     interaction.status = InteractionStatus.IN_PROGRESS;
     const agentToolCall = result.result as AgentToolCall;
     
     thread.appendToolCallInteractionConstruction(interaction, agentToolCall);
     const toolResult = await this.executeToolCall(agentToolCall, sourceAgent.id);
     
-    interaction.result = JSON.stringify(toolResult, null, 2);
-    interaction.status = InteractionStatus.SUCCESS;
-    
-    return interaction;
+      (interaction as ToolCall).result = JSON.stringify(toolResult, null, 2);
+      interaction.status = InteractionStatus.SUCCESS;
+      
+      return interaction;
+    } catch (error) {
+      (interaction as ToolCall).status = InteractionStatus.FAILED;
+      return this.handleHandlerError(InteractionType.TOOL_CALL, error, thread, sourceAgent);
+    }
   }
 
   private handlePlanInteraction(
@@ -303,9 +311,18 @@ export class OrchestrationManager extends Manager {
   private async executePlan(
     plan: Plan,
     thread: Thread,
+    judgementAgent: Agent,
+    summaryAgent: Agent,
     fromUser: boolean
   ): Promise<Interaction> {
-    const judgementAgent = await this.createJudgementAgent(thread);
+    
+    if (!plan.sourceAgentId) {
+      throw new Error("Plan source agent ID not found");
+    }
+    const planInitiatingAgent = this.agentManager.getAgent(plan.sourceAgentId);
+    if (!planInitiatingAgent) {
+      throw new Error("Plan initiating agent not found");
+    }
     const previousTasks: string[] = [];
     
     // Send initial plan goal
@@ -320,10 +337,11 @@ export class OrchestrationManager extends Manager {
         `Processing Task ${task.step}: ${task.instruction}\n`
       );
 
-      previousTasks.push(await this.executeTask(task, plan, thread, previousTasks, judgementAgent));
+      previousTasks.push(await this.executeTask(task, plan, thread, previousTasks, judgementAgent, summaryAgent));
     }
 
-    const summary = this.createPlanExecutionSummary(plan, previousTasks);
+    const summaryText = this.createPlanExecutionSummary(plan, previousTasks);
+    const summaryContent = await this.executeSummary(summaryText, summaryAgent, planInitiatingAgent!, thread);
     const summaryMessage = thread.constructNewInteraction(
       InteractionType.MESSAGE,
       plan.sourceAgentId,
@@ -332,7 +350,7 @@ export class OrchestrationManager extends Manager {
     const outputMessage = thread.appendMessageConstruction(
       summaryMessage,
       MessageRole.ASSISTANT,
-      summary
+      summaryContent
     ) as Message;
     return outputMessage;
   }
@@ -342,7 +360,8 @@ export class OrchestrationManager extends Manager {
     plan: Plan,
     thread: Thread,
     previousTasks: string[],
-    judgementAgent: Agent
+    judgementAgent: Agent,
+    summaryAgent: Agent
   ): Promise<string> {
     const executor = this.createTaskExecutor();
     try {
@@ -356,8 +375,9 @@ export class OrchestrationManager extends Manager {
       let newResult: unknown = null;
 
       while (!resultApproved && taskExecutionCount < 3) {
-        const input = executor.prepareTaskInput(plan, previousTasks, task, missing);
         const agentChain = this.chainManager.getChain(agent.chainId!);
+
+        const input = executor.prepareTaskInput(plan, previousTasks, task, missing, agentChain!.type);
         const formattedInput = this.chainInputStrategies[agentChain!.type](input);
         const result = await this.chainManager.executeChain(agent.chainId!, formattedInput);
         
@@ -381,7 +401,7 @@ export class OrchestrationManager extends Manager {
             }
           } else if (chainInteraction.type === InteractionType.PLAN) {
             // If the chain interaction is a plan, execute the plan
-            const outputMessage = await this.executePlan(chainInteraction as Plan, thread, false);
+            const outputMessage = await this.executePlan(chainInteraction as Plan, thread, judgementAgent, summaryAgent, false);
             (newResult as ChainExecutionResult).result = JSON.stringify({
               goal: (chainInteraction as Plan).goal,
               tasks: (chainInteraction as Plan).tasks,
@@ -430,11 +450,12 @@ export class OrchestrationManager extends Manager {
         return agent;
       },
 
-      prepareTaskInput: (plan: Plan, previousTasks: string[], task: Task, missing: string[]) => {
-        const taskMessage = `Overall Goal: ${plan.goal}\n\n
-          Previous Tasks:\n${previousTasks.join("\n")}\n\n
-          Current Task: ${task.instruction}
-        ` + (missing ? `Missing: ${missing.map((m) => "["+m+"]").join(", ")}` : "");
+      prepareTaskInput: (plan: Plan, previousTasks: string[], task: Task, missing: string[], chainType: ChainType) => {
+        const taskMessage = 
+          (chainType === ChainType.TASK_PLANNING ? `` : `Overall Goal: ${plan.goal}\n\n`) +
+          (previousTasks.length > 0 ? `Previous Tasks:\n${previousTasks.join("\n")}\n\n` : "") +
+          `Current Task: ${task.instruction}` + 
+          (missing ? `Missing: ${missing.map((m) => "["+m+"]").join(", ")}` : "");
         const decodedTaskMessage = decodeURIComponent(taskMessage);
         return decodedTaskMessage;
       },
@@ -512,6 +533,32 @@ export class OrchestrationManager extends Manager {
     return judgementInteraction;
   }
 
+  private async createSummaryAgent(thread: Thread): Promise<Agent> {
+    const summaryAgent = await this.agentManager.createAgent({
+      name: `Summary Agent ${thread.id.slice(0, 8)}`,
+      description: "A summary agent that is responsible for summarizing plan and output",
+      chainType: ChainType.CONVERSATION,
+      modelName: models[0].name,
+      toolIds: [],
+      linkedAgentIds: [],
+    });
+    return summaryAgent;
+  }
+
+  private async executeSummary(planSummary: string, summaryAgent: Agent, planInitiatingAgent: Agent, thread: Thread): Promise<string> {
+    const summaryInput = 
+    `Provide a direct concise answer to the goal, be comprehensive if necessary.`+
+    `Then summarise the plan and final outputs in the end.\n\n${planSummary}`;
+    const summaryResult = await this.handleChainExecution(thread, summaryInput, summaryAgent);
+    const summaryInteraction = await this.handleChainResult(
+      summaryResult,
+      thread,
+      false,
+      summaryAgent,
+      planInitiatingAgent
+    ) as Message;
+    return JSON.parse(summaryInteraction.content);
+  }
   // ----------- Utility Services -----------
   private createJudgementInput(content: string) {
     const splitChars = ["\n", "?"];
@@ -577,449 +624,4 @@ export class OrchestrationManager extends Manager {
     return errorInteraction;
   }
 }
-
-
-
-
-
-//   {    // Get target agent
-//       const targetAgent = this.agentManager.getAgent(initiatingAgentId);
-//       if (!targetAgent) {
-//         throw new Error("No agent assigned to target");
-//       }
-
-//       // Get target agent's chain
-//       if (!targetAgent.chainId) {
-//         throw new Error("No chain ID assigned to agent");
-//       }
-
-//       const chainConfig = this.chainManager.getChain(targetAgent.chainId);
-//       if (!chainConfig) {
-//         throw new Error("Chain not found");
-//       }
-
-//       // Create input based on chain type
-//       const input = this.createChainInput(chainConfig, content);
-//       if (input instanceof Error) {
-//         throw input;
-//       }
-
-//       // Execute chain
-//       const result = await this.chainManager.executeChain(
-//         targetAgent.chainId,
-//         input
-//       );
-
-//       // Handle chain result
-//       if (result.success && result.result) {
-//         const output = await this.handleChainResult(
-//           result,
-//           thread,
-//           true,
-//           targetAgent
-//         );
-
-//         // If the output is a plan, execute it
-//         if (output.type === InteractionType.PLAN) {
-//           const plan = output as Plan;
-//           await this.executePlan(plan, thread, true);
-//         }
-//       } else {
-//         thread.updateStatus(ThreadStatus.FAILED, result.error);
-//       }
-
-//       // Update thread status
-//       thread.updateStatus(ThreadStatus.COMPLETED);
-//     } catch (error) {
-//       thread.updateStatus(
-//         ThreadStatus.FAILED,
-//         error instanceof Error ? error.message : String(error)
-//       );
-//       this.errorManager.logError(error as Error, {
-//         source: this.name,
-//         severity: ErrorSeverity.HIGH,
-//         metadata: { threadId: thread.id },
-//       });
-//       throw error;
-//     }
-//   }
-
-//   createChainInput(
-//     chainConfig: ChainConfig,
-//     content: string
-//   ): Record<string, unknown> | Error {
-//     if (chainConfig.type === ChainType.CONVERSATION) {
-//       return { content: content };
-//     } else if (chainConfig.type === ChainType.TASK_PLANNING) {
-//       return { request: content };
-//     } else if (chainConfig.type === ChainType.TASK_EXECUTION) {
-//       return { task: content };
-//     } else if (chainConfig.type === ChainType.JUDGEMENT) {
-//       const splitChars = ["\n", "?"];
-//       for (const char of splitChars) {
-//         const lines = content.split(char);
-//         if (lines.length > 1) {
-//           return {
-//             requirement: lines[0].replace('"', "-"),
-//             response: lines.slice(1).join("\n").replace('"', "-"),
-//           };
-//         }
-//       }
-//       return {
-//         requirement: content,
-//         response: "",
-//       };
-//     } else {
-//       return new Error("Invalid chain type");
-//     }
-//   }
-
-
-
-
-
-
-//   /**
-//    * Handle tool call, The agent that is responding is considered the source agent this point forward.
-//    * If the agent is responding to a user, the target agent should be left undefined.
-//    * If the agent is responding to another agent, the target agent should be the agent the responding agent is replying to.
-//    * If to User is false, both the source and target agent needs to be set.
-//    */
-//   private async handleChainResult(
-//     result: ChainExecutionResult,
-//     thread: Thread,
-//     toUser: boolean,
-//     sourceAgent: Agent,
-//     targetAgent?: Agent
-//   ): Promise<Interaction> {
-//     const resultType = this.determineResultType(result);
-//     if (resultType instanceof Error) {
-//       throw resultType;
-//     }
-
-//     let output: Interaction;
-//     const formattedResult: unknown =
-//       typeof result.result === "string"
-//         ? this.formatInteractionContent(result.result)
-//         : result.result;
-
-//     switch (resultType) {
-//       case InteractionType.TOOL_CALL:
-//         // Create an empty new tool call interaction
-//         const toolCallInteraction = thread.constructNewInteraction(
-//           InteractionType.TOOL_CALL,
-//           sourceAgent.id,
-//           sourceAgent.id
-//         ) as ToolCall;
-//         try {
-//           // Add tool call properties to the interaction
-//           toolCallInteraction.status = InteractionStatus.IN_PROGRESS;
-//           const agentToolCall = formattedResult as AgentToolCall;
-//           thread.appendToolCallInteractionConstruction(
-//             toolCallInteraction,
-//             agentToolCall
-//           );
-
-//           // Execute the tool call and store the result to the interaction
-//           const toolCallResult = await this.executeToolCall(
-//             agentToolCall,
-//             sourceAgent.id
-//           );
-
-//           if (toolCallResult instanceof Error) {
-//             throw toolCallResult;
-//           }
-//           const formattedToolCall = JSON.stringify(toolCallResult, null, 2);
-//           (toolCallInteraction as ToolCall).result = formattedToolCall;
-//           (toolCallInteraction as ToolCall).status = InteractionStatus.SUCCESS;
-
-//           // Return the tool call result to the user or store it as a tool call interaction
-//           output = toUser
-//             ? (() => {
-//                 const message = thread.constructNewInteraction(
-//                   InteractionType.MESSAGE,
-//                   sourceAgent.id
-//                 ) as Message;
-//                 thread.appendMessageConstruction(
-//                   message,
-//                   MessageRole.ASSISTANT,
-//                   JSON.stringify(toolCallInteraction, null, 2)
-//                 );
-//                 return message as Message;
-//               })()
-//             : toolCallInteraction;
-//         } catch (error) {
-//           thread.appendErrorInteractionConstruction(toolCallInteraction, error);
-//           output = toolCallInteraction;
-//         }
-
-//         break;
-
-//       case InteractionType.PLAN:
-//         const plan = thread.constructNewInteraction(
-//           InteractionType.PLAN,
-//           sourceAgent.id,
-//           sourceAgent.id
-//         ) as Plan;
-//         try {
-//           thread.appendPlanConstruction(
-//             plan,
-//             formattedResult as AgentPlan,
-//             thread
-//           );
-//         } catch (error) {
-//           thread.appendErrorInteractionConstruction(plan, error);
-//         } finally {
-//           output = plan;
-//         }
-//         break;
-
-//       case InteractionType.JUDGEMENT:
-//         const judgement = thread.constructNewInteraction(
-//           InteractionType.JUDGEMENT,
-//           sourceAgent.id,
-//           sourceAgent.id
-//         ) as Judgement;
-//         try {
-//           thread.appendJudgementConstruction(
-//             judgement,
-//             formattedResult as AgentJudgement
-//           );
-//           output = toUser
-//             ? (() => {
-//                 const message = thread.constructNewInteraction(
-//                   InteractionType.MESSAGE,
-//                   sourceAgent.id
-//                 ) as Message;
-//                 thread.appendMessageConstruction(
-//                   message,
-//                   MessageRole.ASSISTANT,
-//                   JSON.stringify(judgement, null, 2)
-//                 );
-//                 return message as Message;
-//               })()
-//             : judgement;
-//         } catch (error) {
-//           thread.appendErrorInteractionConstruction(judgement, error);
-//           output = judgement;
-//         }
-//         break;
-
-//       case InteractionType.MESSAGE:
-//         const message = thread.constructNewInteraction(
-//           InteractionType.MESSAGE,
-//           sourceAgent.id,
-//           toUser ? undefined : targetAgent?.id
-//         ) as Message;
-//         try {
-//           thread.appendMessageConstruction(
-//             message,
-//             MessageRole.ASSISTANT,
-//             formattedResult as string
-//           );
-//         } catch (error) {
-//           thread.appendErrorInteractionConstruction(message, error);
-//         } finally {
-//           output = message;
-//         }
-//         break;
-
-//       default:
-//         throw new Error("Invalid chain result");
-//     }
-
-//     return output as Interaction;
-//   }
-
-//   private determineResultType(
-//     result: ChainExecutionResult
-//   ): InteractionType | Error {
-//     if (typeof result.result === "object" && "execution" in result.result) {
-//       return InteractionType.TOOL_CALL;
-//     } else if (typeof result.result === "object" && "goal" in result.result) {
-//       return InteractionType.PLAN;
-//     } else if (
-//       typeof result.result === "object" &&
-//       "satisfied" in result.result
-//     ) {
-//       return InteractionType.JUDGEMENT;
-//     } else if (typeof result.result === "string") {
-//       return InteractionType.MESSAGE;
-//     } else {
-//       return new Error("Invalid chain result");
-//     }
-//   }
-
-//   private async executePlan(
-//     plan: Plan,
-//     thread: Thread,
-//     fromUser: boolean
-//   ): Promise<void> {
-//     const previousTasks: string[] = [];
-
-//     for (const task of plan.tasks) {
-//       try {
-//         task.status = InteractionStatus.IN_PROGRESS;
-
-//         if (!task.targetAgentId) {
-//           throw new Error("No target agent ID assigned to task");
-//         }
-
-//         const agent = this.agentManager.getAgent(task.targetAgentId);
-//         if (!agent) {
-//           throw new Error("No agent assigned to task");
-//         }
-
-//         // Get agent's chain
-//         if (!agent.chainId) {
-//           throw new Error("No chain ID assigned to agent");
-//         }
-
-//         // Get agent's chain config
-//         const chainConfig = this.chainManager.getChain(agent.chainId);
-//         if (!chainConfig) {
-//           throw new Error("Chain not found");
-//         }
-
-//         // Create a input summary message of the plan and previous tasks
-//         const taskMessage =
-//           `Overall Goal: ${plan.goal}\n\n` +
-//           `Previous Tasks:\n${previousTasks.join("\n")}\n\n` +
-//           `Current Task: ${task.instruction}`;
-//         const decodedTaskMessage = decodeURIComponent(taskMessage);
-
-//         // Create input based on chain type
-//         const input = this.createChainInput(chainConfig, decodedTaskMessage);
-//         if (input instanceof Error) {
-//           throw input;
-//         }
-
-//         // Execute chain
-//         const result = await this.chainManager.executeChain(
-//           agent.chainId,
-//           input
-//         );
-
-//         if (result.success && result.result) {
-//           const executionOutput = await this.handleChainResult(
-//             result,
-//             thread,
-//             false,
-//             agent,
-//             agent
-//           );
-
-//           task.status = InteractionStatus.SUCCESS;
-//           task.result = result.result;
-//           previousTasks.push(this.formatTaskOutput(task, executionOutput));
-
-//           if (executionOutput.type === InteractionType.PLAN) {
-//             await this.executePlan(executionOutput as Plan, thread, fromUser);
-//           }
-//         } else {
-//           thread.appendErrorInteractionConstruction(task, result.error);
-//           previousTasks.push(
-//             `Task ${task.step}: ${task.instruction}\nStatus: Failed\nError: ${result.error}`
-//           );
-//         }
-
-//         // // Update the thread with the completed task
-//         // const message = this.constructNewInteraction(
-//         //   thread,
-//         //   InteractionType.MESSAGE,
-//         //   agent.id
-//         // );
-//         // this.appendMessageConstruction(
-//         //   message,
-//         //   MessageRole.ASSISTANT,
-//         //   JSON.stringify(previousTasks, null, 2)
-//         // );
-//       } catch (error) {
-//         thread.appendErrorInteractionConstruction(task, error);
-//       }
-//     }
-
-//     // Return to user the outcome of the plan execution
-//     const summaryMessage = thread.constructNewInteraction(
-//       InteractionType.MESSAGE,
-//       plan.targetAgentId,
-//       fromUser ? undefined : plan.sourceAgentId
-//     ) as Message;
-
-//     const formattedSummary =
-//       `Plan Execution Summary\n` +
-//       `====================\n` +
-//       `Goal: ${plan.goal}\n\n` +
-//       previousTasks.join("\n\n");
-
-//     thread.appendMessageConstruction(
-//       summaryMessage,
-//       MessageRole.ASSISTANT,
-//       formattedSummary
-//     );
-//   }
-
-//   private formatTaskOutput(task: Task, executionOutput: Interaction): string {
-//     let formattedOutput = `Task ${task.step}: ${task.instruction}\n`;
-//     formattedOutput += "----------------------------------------\n";
-
-//     if (executionOutput.type === InteractionType.TOOL_CALL) {
-//       const toolCall = executionOutput as ToolCall;
-//       formattedOutput += `Tool: ${toolCall.toolName}.${toolCall.functionName}\n`;
-
-//       try {
-//         // Parse and format the result if it's JSON
-//         const result = JSON.parse(toolCall.result as string);
-//         formattedOutput += "Result:\n" + JSON.stringify(result, null, 2);
-//       } catch {
-//         formattedOutput += `Result: ${toolCall.result}`;
-//       }
-//     } else if (executionOutput.type === InteractionType.MESSAGE) {
-//       const message = executionOutput as Message;
-//       formattedOutput += `Response: ${message.content}`;
-//     }
-
-//     return formattedOutput;
-//   }
-
-//   private async executeToolCall(
-//     toolCall: AgentToolCall,
-//     agentId: string
-//   ): Promise<unknown> {
-//     const agent = this.agentManager.getAgent(agentId);
-//     if (!agent) {
-//       throw new Error("No agent assigned to tool call");
-//     }
-//     const availableTools = agent.toolIds?.map((toolId) =>
-//       this.agentManager.getTool(toolId)
-//     );
-//     const tool = availableTools?.find(
-//       (tool) => tool?.name === toolCall.execution.connectorName
-//     );
-
-//     if (!tool) {
-//       throw new Error(`Tool not found: ${toolCall.execution.connectorName}`);
-//     }
-//     const executor = this.agentManager.getToolExecutor(tool.id);
-//     if (!executor) {
-//       throw new Error(`Executor not found: ${tool.id}`);
-//     }
-//     const result = await executor(
-//       toolCall.execution.functionName,
-//       toolCall.execution.parameters
-//     );
-//     return result;
-//   }
-
-//   private formatInteractionContent(content: string): string {
-//     try {
-//       // Try to parse and re-stringify to ensure consistent formatting
-//       const parsed = JSON.parse(content);
-//       return JSON.stringify(parsed, null, 2);
-//     } catch {
-//       // If not valid JSON, return as-is
-//       return content;
-//     }
-//   }
-// }
 

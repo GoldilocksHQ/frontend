@@ -71,7 +71,17 @@ export function ChatInterface({
                     : "bg-muted"
                 )}
               >
-                {message.content}
+                <div 
+                  className="whitespace-pre-line"
+                  dangerouslySetInnerHTML={{
+                    __html: (message.content || '')
+                      .trim()
+                      .replace(/^"|"$/g, '')
+                      .replace(/\\n/g, '<br/>')
+                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/\\"/g, '"')
+                  }}
+                />
               </div>
             </div>
           )}

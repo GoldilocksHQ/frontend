@@ -386,7 +386,7 @@ export class Thread extends ThreadEntity {
     content: string
   ): Message {
     (interaction as Message).role = role;
-    (interaction as Message).content = content;
+    (interaction as Message).content = JSON.stringify(content);
     return interaction as Message;
   }
 
