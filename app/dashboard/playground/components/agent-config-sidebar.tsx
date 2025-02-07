@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Info } from "lucide-react";
+import { Info, Key } from "lucide-react";
 import { Agent, AgentConfig } from "@/lib/managers/agent-manager";
 import { ManagedError } from "@/lib/managers/error-manager";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -29,6 +29,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ToolDefinition, ToolParameter } from "@/lib/managers/tool-manager";
+import { PlaidLinkTokenDialog } from "./plaid-link-token-dialog";
+
 interface AgentConfigSidebarProps {
   agent: Agent;
   errors: ManagedError[];
@@ -55,6 +57,8 @@ export function AgentConfigSidebar({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [selectedToolDefinition, setSelectedToolDefinition] =
     useState<ToolDefinition | null>(null);
+  const [showLinkTokenDialog, setShowLinkTokenDialog] = useState(false);
+  const [, setPlaidToken] = useState<string | null>(null);
 
   useEffect(() => {
     setName(agent.name);
@@ -249,6 +253,19 @@ export function AgentConfigSidebar({
                 </div>
                 <span className="flex-1">{tool.name}</span>
 
+                {/* New Token Input Button */}
+                {tool.name === "plaid" && <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowLinkTokenDialog(true);
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                    <Key className="h-4 w-4" />
+                  </button>
+                }
+
+                {/* Tool Info Button */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -353,6 +370,16 @@ export function AgentConfigSidebar({
             </div>
           </DialogContent>
         </Dialog>
+        {/* Plaid Link Token Dialog */}
+        <PlaidLinkTokenDialog
+          open={showLinkTokenDialog}
+          onOpenChange={setShowLinkTokenDialog}
+          onSuccess={() => {}}
+          onExit={(error) => {
+            if (error) console.error('Plaid link error:', error);
+            setPlaidToken(null);
+          }}
+        />
       </div>
     </div>
   );

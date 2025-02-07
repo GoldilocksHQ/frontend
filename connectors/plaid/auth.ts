@@ -2,7 +2,7 @@ import { tokenExists } from '@/services/supabase/server';
 import { updateCredentials } from '@/services/supabase/server';
 import { storeCredentials } from '@/services/supabase/server';
 import { UUID } from 'crypto';
-import { Configuration, PlaidEnvironments, PlaidApi, LinkTokenCreateRequest, Products, CountryCode, LinkTokenCreateResponse } from 'plaid';
+import { Configuration, PlaidEnvironments, PlaidApi, LinkTokenCreateRequest, CountryCode, LinkTokenCreateResponse, Products } from 'plaid';
 import { constructCredentials } from '../utils';
 
 const PLAID_CONFIG = {
@@ -10,6 +10,10 @@ const PLAID_CONFIG = {
   secret: process.env.PLAID_SECRET!,
   redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/connectors/callback`,
 }
+
+const DATA_PRODUCTS = [Products.Auth, Products.Identity, Products.Signal];
+const PAYMENT_PRODUCTS = [Products.PaymentInitiation];
+
 
 export async function getAuthUrl(userId: UUID) {
   const plaidClient = await createPlaidClient();
@@ -33,12 +37,15 @@ export async function createPlaidClient(): Promise<PlaidApi> {
   return plaidClient;
 }
 
-export async function createLinkToken(userId: string, plaidClient: PlaidApi): Promise<LinkTokenCreateResponse> {
+export async function createLinkToken(userId: string, plaidClient: PlaidApi, paymentId?: string): Promise<LinkTokenCreateResponse> {
   const linkTokenConfig: LinkTokenCreateRequest = {
     user: { client_user_id: userId },
     client_name: "Plaid Tutorial",
     language: "en",
-    products: [Products.Auth, Products.Identity, Products.Signal],
+    products: paymentId ? PAYMENT_PRODUCTS : DATA_PRODUCTS,
+    payment_initiation: {
+      payment_id: paymentId
+    },
     country_codes: [CountryCode.Gb],
     webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/connectors/callback`,
   };

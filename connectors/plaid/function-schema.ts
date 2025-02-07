@@ -68,5 +68,51 @@ export const plaidToolDefinition: ToolDefinition = {
         },
       },
     },
+    {
+      name: "intiatePayment",
+      description: "Intiate a payment to a recipient",
+      parameters: {
+        type: "object",
+        properties: {
+          recipientName: { 
+            type: "string",
+            description: "The name of the recipient" 
+          },
+          accountNumber: { 
+            type: "string",
+            description: "The account number of the recipient" 
+          },
+          sortCode: {
+            type: "string",
+            description: "The sort code of the recipient" 
+          },
+          currency: { 
+            type: "string",
+            description: "The currency of the payment" 
+          },
+          reference: { 
+            type: "string", 
+            description: "The reference of the payment" 
+          },
+          amount: { 
+            type: "number", 
+            description: "The amount of the payment" 
+          },
+        },
+        required: ["recipientName", "accountNumber", "sortCode", "currency", "reference", "amount"],
+      },
+      responseSchema: {
+        type: "json_schema",
+        json_schema: {
+          name: "intiate_payment_response",
+          schema: {
+            type: "object",
+            properties: {
+              linkToken: { type: "string" },
+            },
+          },
+        },
+      },
+    },
   ],
 };
