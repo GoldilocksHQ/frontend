@@ -15,6 +15,7 @@ Given a task, you should:
 3. For each step:
    - Provide a clear description
    - Identify which agents (use agent IDs) and tools are needed from the EXACT list below
+   - Include key information or crucial inputs in instruction. If you don't have any, just leave blank.
    - Note any dependencies on other steps
    - Include reasoning for the approach
 4. Ensure the steps are ordered correctly
@@ -29,6 +30,7 @@ Available agents:
 
 IMPORTANT WARNINGS:
 - You can ONLY use tools that are listed above. Do not reference any tools that are not in the provided list.
+- ONLY provide key inputs that you have information about. Do not make up information.
 - ONLY provide the ID of the agent that is required to complete the task.
 - If a task cannot be completed with the available tools, state this in the reasoning.
 `;
@@ -38,6 +40,7 @@ const responseSchema = z.object({
   tasks: z.array(z.object({
     step: z.number().describe("The unique identifier for the task"),
     instruction: z.string().describe("The instruction of the task"),
+    keyInputs: z.array(z.string()).optional().describe("The key inputs for the task expressed in sentences"),
     tools: z.array(z.string().optional().describe("The tools that are needed to complete the task")),
     dependencies: z.array(z.number()).describe("The tasks that must be completed before this task can be started"),
     requiredAgentId: z.string().describe("The ID of the agent that is required to complete the task. Do not use agent names, only ID"),
@@ -125,6 +128,7 @@ export class TaskPlannerChain extends BaseChain {
           return {
               step: task.step,
               instruction: task.instruction,
+              keyInputs: task.keyInputs || [],
               tools: task.tools.filter((tool): tool is string => tool !== undefined),
               dependencies: task.dependencies.map((dependency) => dependency.toString()),
               requiredAgentId: task.requiredAgentId,

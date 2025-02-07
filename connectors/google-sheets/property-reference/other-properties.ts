@@ -276,7 +276,7 @@ export const GridRange = {
   properties: {
     sheetId: { 
       type: "integer",
-      description: "The sheet ID of the range"
+      description: "The sheet ID of the range, a unique identifier for a sheet. Example format: 138325925"
     },
     startRowIndex: { 
       type: "integer",
@@ -438,7 +438,7 @@ export const GridCoordinate = {
   properties: {
     sheetId: { 
       type: "integer",
-      description: "The sheet ID of the coordinate"
+      description: "The sheet ID of the coordinate, a unique identifier for a sheet. Example format: 138325925"
     },
     rowIndex: { 
       type: "integer",

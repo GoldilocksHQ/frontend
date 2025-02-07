@@ -79,6 +79,7 @@ export const DelimiterType = {
 
 // Basic update requests
 export const UpdateSpreadsheetPropertiesRequest = {
+  name: "UpdateSpreadsheetPropertiesRequest",
   type: "object",
   properties: {
     properties: SpreadsheetProperties,
@@ -91,6 +92,7 @@ export const UpdateSpreadsheetPropertiesRequest = {
 };
 
 export const UpdateSheetPropertiesRequest = {
+  name: "UpdateSheetProperties",
   type: "object",
   properties: {
     properties: SheetProperties,
@@ -103,6 +105,7 @@ export const UpdateSheetPropertiesRequest = {
 };
 
 export const DataSourceSheetDimensionRange = {
+  name: "DataSourceSheetDimensionRange",
   type: "object",
   properties: {
     sheetId: { type: "integer" },
@@ -115,6 +118,7 @@ export const DataSourceSheetDimensionRange = {
 };
 
 export const UpdateDimensionPropertiesRequest = {
+  name: "UpdateDimensionProperties",
   type: "object",
   properties: {
     properties: DimensionProperties,
@@ -131,6 +135,7 @@ export const UpdateDimensionPropertiesRequest = {
 
 // Named Range Operations
 export const UpdateNamedRangeRequest = {
+  name: "UpdateNamedRange",
   type: "object",
   properties: {
     namedRange: NamedRange,
@@ -143,6 +148,7 @@ export const UpdateNamedRangeRequest = {
 };
 
 export const AddNamedRangeRequest = {
+  name: "AddNamedRange",
   type: "object",
   properties: {
     namedRange: NamedRange
@@ -151,6 +157,7 @@ export const AddNamedRangeRequest = {
 };
 
 export const DeleteNamedRangeRequest = {
+  name: "DeleteNamedRange",
   type: "object",
   properties: {
     namedRangeId: { type: "string" }
@@ -160,6 +167,7 @@ export const DeleteNamedRangeRequest = {
 
 // Cell Operations
 export const RepeatCellRequest = {
+  name: "RepeatCell",
   type: "object",
   properties: {
     range: GridRange,
@@ -173,6 +181,7 @@ export const RepeatCellRequest = {
 };
 
 export const CutPasteRequest = {
+  name: "CutPaste",
   type: "object",
   properties: {
     source: GridRange,
@@ -183,6 +192,7 @@ export const CutPasteRequest = {
 };
 
 export const CopyPasteRequest = {
+  name: "CopyPaste",
   type: "object",
   properties: {
     source: GridRange,
@@ -194,6 +204,7 @@ export const CopyPasteRequest = {
 };
 
 export const MergeCellsRequest = {
+  name: "MergeCells",
   type: "object",
   properties: {
     range: GridRange,
@@ -203,6 +214,7 @@ export const MergeCellsRequest = {
 };
 
 export const UnmergeCellsRequest = {
+  name: "UnmergeCells",
   type: "object",
   properties: {
     range: GridRange
@@ -211,6 +223,7 @@ export const UnmergeCellsRequest = {
 };
 
 export const UpdateBordersRequest = {
+  name: "UpdateBorders",
   type: "object",
   properties: {
     range: GridRange,
@@ -225,6 +238,7 @@ export const UpdateBordersRequest = {
 };
 
 export const UpdateCellsRequest = {
+  name: "UpdateCells",
   type: "object",
   properties: {
     rows: {
@@ -234,7 +248,7 @@ export const UpdateCellsRequest = {
     },
     fields: {
       type: "string",
-      description: "The fields of CellData that should be updated. At least one field must be specified."
+      description: "The fields of CellData that should be updated. At least one field must be specified. The root is the CellData; 'row.values.' should not be specified. A single'*' can be used as short-hand for listing every field."
     },
     start: GridCoordinate,
     range: GridRange
@@ -248,6 +262,7 @@ export const UpdateCellsRequest = {
 
 // Sheet Operations
 export const AddSheetRequest = {
+  name: "AddSheet",
   type: "object",
   properties: {
     properties: SheetProperties
@@ -256,6 +271,7 @@ export const AddSheetRequest = {
 };
 
 export const DeleteSheetRequest = {
+  name: "DeleteSheet",
   type: "object",
   properties: {
     sheetId: { type: "integer" }
@@ -264,6 +280,7 @@ export const DeleteSheetRequest = {
 };
 
 export const SourceAndDestination = {
+  name: "SourceAndDestination",
   type: "object",
   properties: {
     source: GridRange,
@@ -274,6 +291,7 @@ export const SourceAndDestination = {
 };
 
 export const AutoFillRequest = {
+  name: "AutoFill",
   type: "object",
   properties: {
     useAlternateSeries: { type: "boolean" },
@@ -284,6 +302,7 @@ export const AutoFillRequest = {
 };
 
 export const DuplicateSheetRequest = {
+  name: "DuplicateSheet",
   type: "object",
   properties: {
     sourceSheetId: { 
@@ -308,6 +327,7 @@ export const DuplicateSheetRequest = {
 
 // Filter Operations
 export const AddFilterViewRequest = {
+  name: "AddFilterView",
   type: "object",
   properties: {
     filter: FilterView
@@ -316,6 +336,7 @@ export const AddFilterViewRequest = {
 };
 
 export const UpdateFilterViewRequest = {
+  name: "UpdateFilterView",
   type: "object",
   properties: {
     filter: FilterView,
@@ -328,6 +349,7 @@ export const UpdateFilterViewRequest = {
 };
 
 export const DeleteFilterViewRequest = {
+  name: "DeleteFilterView",
   type: "object",
   properties: {
     filterId: { type: "integer" }
@@ -336,6 +358,7 @@ export const DeleteFilterViewRequest = {
 };
 
 export const ClearBasicFilterRequest = {
+  name: "ClearBasicFilter",
   type: "object",
   properties: {
     sheetId: { type: "integer" }
@@ -345,6 +368,7 @@ export const ClearBasicFilterRequest = {
 
 // Dimension Operations
 export const AppendDimensionRequest = {
+  name: "AppendDimension",
   type: "object",
   properties: {
     sheetId: { type: "integer" },
@@ -355,6 +379,7 @@ export const AppendDimensionRequest = {
 };
 
 export const DeleteDimensionRequest = {
+  name: "DeleteDimension",
   type: "object",
   properties: {
     range: DimensionRange
@@ -364,6 +389,7 @@ export const DeleteDimensionRequest = {
 
 // Auto Resize Request
 export const AutoResizeDimensionsRequest = {
+  name: "AutoResizeDimensions",
   type: "object",
   properties: {
     dimensions: DimensionRange,
@@ -377,6 +403,7 @@ export const AutoResizeDimensionsRequest = {
 
 // Chart Operations
 export const AddChartRequest = {
+  name: "AddChart",
   type: "object",
   properties: {
     chart: EmbeddedChart
@@ -386,6 +413,7 @@ export const AddChartRequest = {
 
 // Protected Range Operations
 export const AddProtectedRangeRequest = {
+  name: "AddProtectedRange",
   type: "object",
   properties: {
     protectedRange: ProtectedRange
@@ -394,6 +422,7 @@ export const AddProtectedRangeRequest = {
 };
 
 export const UpdateProtectedRangeRequest = {
+  name: "UpdateProtectedRange",
   type: "object",
   properties: {
     protectedRange: ProtectedRange,
@@ -406,6 +435,7 @@ export const UpdateProtectedRangeRequest = {
 };
 
 export const DeleteProtectedRangeRequest = {
+  name: "DeleteProtectedRange",
   type: "object",
   properties: {
     protectedRangeId: { type: "integer" }
@@ -415,6 +445,7 @@ export const DeleteProtectedRangeRequest = {
 
 // Data Manipulation Requests
 export const TextToColumnsRequest = {
+  name: "TextToColumns",
   type: "object",
   properties: {
     source: GridRange,
@@ -436,6 +467,7 @@ export const TextToColumnsRequest = {
 };
 
 export const DeleteRangeRequest = {
+  name: "DeleteRange",
   type: "object",
   properties: {
     range: GridRange,
@@ -445,6 +477,7 @@ export const DeleteRangeRequest = {
 };
 
 export const InsertRangeRequest = {
+  name: "InsertRange",
   type: "object",
   properties: {
     range: GridRange,
@@ -454,6 +487,7 @@ export const InsertRangeRequest = {
 };
 
 export const MoveDimensionRequest = {
+  name: "MoveDimension",
   type: "object",
   properties: {
     source: DimensionRange,
@@ -464,6 +498,7 @@ export const MoveDimensionRequest = {
 
 // Formatting Requests
 export const AddConditionalFormatRuleRequest = {
+  name: "AddConditionalFormatRule",
   type: "object",
   properties: {
     rule: ConditionalFormatRule,
@@ -476,6 +511,7 @@ export const AddConditionalFormatRuleRequest = {
 };
 
 export const UpdateConditionalFormatRuleRequest = {
+  name: "UpdateConditionalFormatRule",
   type: "object",
   properties: {
     sheetId: { 
@@ -500,6 +536,7 @@ export const UpdateConditionalFormatRuleRequest = {
 };
 
 export const DeleteConditionalFormatRuleRequest = {
+  name: "DeleteConditionalFormatRule",
   type: "object",
   properties: {
     sheetId: { 
@@ -516,6 +553,7 @@ export const DeleteConditionalFormatRuleRequest = {
 
 // Data Validation and Sorting
 export const SetDataValidationRequest = {
+  name: "SetDataValidation",
   type: "object",
   properties: {
     range: GridRange,
@@ -525,6 +563,7 @@ export const SetDataValidationRequest = {
 };
 
 export const SetBasicFilterRequest = {
+  name: "SetBasicFilter",
   type: "object",
   properties: {
     filter: BasicFilter
@@ -533,6 +572,7 @@ export const SetBasicFilterRequest = {
 };
 
 export const SortRangeRequest = {
+  name: "SortRange",
   type: "object",
   properties: {
     range: GridRange,
@@ -546,6 +586,7 @@ export const SortRangeRequest = {
 
 // Banding Requests
 export const AddBandingRequest = {
+  name: "AddBanding",
   type: "object",
   properties: {
     bandedRange: BandedRange
@@ -554,6 +595,7 @@ export const AddBandingRequest = {
 };
 
 export const UpdateBandingRequest = {
+  name: "UpdateBanding",
   type: "object",
   properties: {
     bandedRange: BandedRange,
@@ -563,6 +605,7 @@ export const UpdateBandingRequest = {
 };
 
 export const DeleteBandingRequest = {
+  name: "DeleteBanding",
   type: "object",
   properties: {
     bandedRangeId: { type: "integer" }
@@ -572,6 +615,7 @@ export const DeleteBandingRequest = {
 
 // Developer Metadata Operations
 export const CreateDeveloperMetadataRequest = {
+  name: "CreateDeveloperMetadata",
   type: "object",
   properties: {
     developerMetadata: DeveloperMetadata
@@ -580,6 +624,7 @@ export const CreateDeveloperMetadataRequest = {
 };
 
 export const UpdateDeveloperMetadataRequest = {
+  name: "UpdateDeveloperMetadata",
   type: "object",
   properties: {
     dataFilters: {
@@ -596,6 +641,7 @@ export const UpdateDeveloperMetadataRequest = {
 };
 
 export const DeleteDeveloperMetadataRequest = {
+  name: "DeleteDeveloperMetadata",
   type: "object",
   properties: {
     dataFilter: DataFilter
@@ -605,6 +651,7 @@ export const DeleteDeveloperMetadataRequest = {
 
 // Dimension Group Operations
 export const AddDimensionGroupRequest = {
+  name: "AddDimensionGroup",
   type: "object",
   properties: {
     range: DimensionRange
@@ -613,6 +660,7 @@ export const AddDimensionGroupRequest = {
 };
 
 export const DeleteDimensionGroupRequest = {
+  name: "DeleteDimensionGroup",
   type: "object",
   properties: {
     range: DimensionRange
@@ -621,6 +669,7 @@ export const DeleteDimensionGroupRequest = {
 };
 
 export const UpdateDimensionGroupRequest = {
+  name: "UpdateDimensionGroup",
   type: "object",
   properties: {
     dimensionGroup: DimensionGroup,
@@ -631,10 +680,6 @@ export const UpdateDimensionGroupRequest = {
   },
   required: ["dimensionGroup", "fields"]
 };
-
-// Data Source Operations
-
-
 
 // Data Source Object Reference schema
 export const DataSourceObjectReference = {
@@ -689,6 +734,7 @@ export const DataSourceObjectReferences = {
 };
 
 export const AddDataSourceRequest = {
+  name: "AddDataSource",
   type: "object",
   properties: {
     dataSource: DataSource
@@ -697,6 +743,7 @@ export const AddDataSourceRequest = {
 };
 
 export const UpdateDataSourceRequest = {
+  name: "UpdateDataSource",
   type: "object",
   properties: {
     dataSource: DataSource,
@@ -709,6 +756,7 @@ export const UpdateDataSourceRequest = {
 };
 
 export const DeleteDataSourceRequest = {
+  name: "DeleteDataSource",
   type: "object",
   properties: {
     dataSourceId: { type: "string" }
@@ -717,6 +765,7 @@ export const DeleteDataSourceRequest = {
 };
 
 export const RefreshDataSourceRequest = {
+  name: "RefreshDataSource",
   type: "object",
   properties: {
     force: { type: "boolean" },
@@ -732,6 +781,7 @@ export const RefreshDataSourceRequest = {
 };
 
 export const CancelDataSourceRefreshRequest = {
+  name: "CancelDataSourceRefresh",
   type: "object",
   properties: {
     references: DataSourceObjectReferences,
@@ -747,6 +797,7 @@ export const CancelDataSourceRefreshRequest = {
 
 // Miscellaneous Operations
 export const TrimWhitespaceRequest = {
+  name: "TrimWhitespace",
   type: "object",
   properties: {
     range: GridRange
@@ -755,6 +806,7 @@ export const TrimWhitespaceRequest = {
 };
 
 export const DeleteDuplicatesRequest = {
+  name: "DeleteDuplicates",
   type: "object",
   properties: {
     range: GridRange,
@@ -767,6 +819,7 @@ export const DeleteDuplicatesRequest = {
 };
 
 export const UpdateEmbeddedObjectBorderRequest = {
+  name: "UpdateEmbeddedObjectBorder",
   type: "object",
   properties: {
     objectId: { type: "integer" },
@@ -780,6 +833,7 @@ export const UpdateEmbeddedObjectBorderRequest = {
 };
 
 export const AddSlicerRequest = {
+  name: "AddSlicer",
   type: "object",
   properties: {
     slicer: Slicer
@@ -788,6 +842,7 @@ export const AddSlicerRequest = {
 };
 
 export const UpdateSlicerSpecRequest = {
+  name: "UpdateSlicerSpec",
   type: "object",
   properties: {
     slicerId: { type: "integer" },
@@ -803,6 +858,7 @@ export const UpdateSlicerSpecRequest = {
 // Missing request types from function-schema.ts
 
 export const AppendCellsRequest = {
+  name: "AppendCells",
   type: "object",
   properties: {
     sheetId: { type: "integer" },
@@ -819,6 +875,7 @@ export const AppendCellsRequest = {
 };
 
 export const DeleteEmbeddedObjectRequest = {
+  name: "DeleteEmbeddedObject",
   type: "object",
   properties: {
     objectId: { type: "integer" }
@@ -827,6 +884,7 @@ export const DeleteEmbeddedObjectRequest = {
 };
 
 export const DuplicateFilterViewRequest = {
+  name: "DuplicateFilterView",
   type: "object",
   properties: {
     filterId: { type: "integer" }
@@ -835,6 +893,7 @@ export const DuplicateFilterViewRequest = {
 };
 
 export const FindReplaceRequest = {
+  name: "FindReplace",
   type: "object",
   properties: {
     find: { 
@@ -879,6 +938,7 @@ export const FindReplaceRequest = {
 };
 
 export const InsertDimensionRequest = {
+  name: "InsertDimension",
   type: "object",
   properties: {
     range: DimensionRange,
@@ -888,6 +948,7 @@ export const InsertDimensionRequest = {
 };
 
 export const UpdateEmbeddedObjectPositionRequest = {
+  name: "UpdateEmbeddedObjectPosition",
   type: "object",
   properties: {
     objectId: { type: "integer" },
@@ -901,6 +962,7 @@ export const UpdateEmbeddedObjectPositionRequest = {
 };
 
 export const PasteDataRequest = {
+  name: "PasteData",
   type: "object",
   properties: {
     coordinate: GridCoordinate,
@@ -930,14 +992,7 @@ export const PasteDataRequest = {
 };
 
 export const RandomizeRangeRequest = {
-  type: "object",
-  properties: {
-    range: GridRange
-  },
-  required: ["range"]
-};
-
-export const TrimSheetRequest = {
+  name: "RandomizeRange",
   type: "object",
   properties: {
     range: GridRange
@@ -946,6 +1001,7 @@ export const TrimSheetRequest = {
 };
 
 export const UpdateChartSpecRequest = {
+  name: "UpdateChartSpec",
   type: "object",
   properties: {
     chartId: { type: "integer" },
@@ -955,6 +1011,7 @@ export const UpdateChartSpecRequest = {
 };
 
 export const UpdateEmbeddedObjectRequest = {
+  name: "UpdateEmbeddedObject",
   type: "object",
   properties: {
     objectId: { type: "integer" },

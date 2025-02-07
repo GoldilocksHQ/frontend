@@ -42,13 +42,19 @@ export async function handleFunction(
     });
 
     switch (functionName) {
-      case 'readSheet': {
+      case 'getSpreadsheet': {
+        if (!args.spreadsheetId) {
+          return { success: false, result: null, error: 'Spreadsheet ID is required' };
+        }
+        return await getSpreadsheet(oauth2Client, args.spreadsheetId);
+      }
+      case 'readValues': {
         if (!args.spreadsheetId || !args.range) {
           return { success: false, result: null, error: 'Spreadsheet ID and range are required' };
         }
         return await readValues(oauth2Client, args.spreadsheetId, args.range);
       }
-      case 'updateSheet': {
+      case 'updateValues': {
         if (!args.spreadsheetId || !args.range || !args.values) {
           return { success: false, result: null, error: 'Spreadsheet ID, range, and values are required' };
         }
@@ -60,12 +66,25 @@ export async function handleFunction(
         }
         return await createSheet(oauth2Client, args.sheetName);
       }
-      case 'batchUpdate': {
+      // Manage Conditional Formatting using the BatchUpdate API
+      case 'manageConditionalFormatting': {
         if (!args.spreadsheetId || !args.requests || !args.responseRanges) {
           return { success: false, result: null, error: 'Spreadsheet ID, requests, and response ranges are required' };
         }
 
-        return await batchUpdate(oauth2Client, args.spreadsheetId, args.requests, args.responseRanges);
+        return await batchUpdate(oauth2Client, args.spreadsheetId, args.requests, args.responseRanges, true);
+      }
+      case 'manageSheet': {
+        if (!args.spreadsheetId || !args.requests) {
+          return { success: false, result: null, error: 'Spreadsheet ID, and requests are required' };
+        }
+        return await batchUpdate(oauth2Client, args.spreadsheetId, args.requests, undefined, false);
+      }
+      case 'cutCopyPasteValues': {
+        if (!args.spreadsheetId || !args.requests || !args.responseRanges) {
+          return { success: false, result: null, error: 'Spreadsheet ID, requests, and response ranges are required' };
+        }
+        return await batchUpdate(oauth2Client, args.spreadsheetId, args.requests, args.responseRanges, true);
       }
       default:
         return { success: false, result: null, error: `Unknown function: ${functionName}` };
@@ -75,6 +94,22 @@ export async function handleFunction(
     return { success: false, result: null, error: String(error) };
   }
 }
+
+
+export async function getSpreadsheet(
+  oauth2Client: OAuth2Client,
+  spreadsheetId: string
+): Promise<FunctionResult<sheets_v4.Schema$Spreadsheet | null>> {
+  try {
+    const sheets = google.sheets({ version: "v4", auth: oauth2Client });
+    const response = await sheets.spreadsheets.get({ spreadsheetId });
+    return { success: true, result: response.data, error: undefined };
+  } catch (error) {
+    console.error("Error getting spreadsheet:", error);
+    return { success: false, result: null, error: String(error) };
+  }
+}
+
 
 export async function readValues(
   oauth2Client: OAuth2Client,
@@ -142,7 +177,8 @@ export async function batchUpdate(
   oauth2Client: OAuth2Client,
   spreadsheetId: string,
   requests: sheets_v4.Schema$Request[],
-  responseRanges: string[]
+  responseRanges?: string[],
+  responseIncludeGridData?: boolean
 ): Promise<FunctionResult<sheets_v4.Schema$BatchUpdateSpreadsheetResponse | null>> {
   try {
     const sheets = google.sheets({ version: "v4", auth: oauth2Client });
@@ -151,8 +187,8 @@ export async function batchUpdate(
       requestBody: {
         requests: requests,
         includeSpreadsheetInResponse: true,
-        responseRanges: responseRanges,
-        responseIncludeGridData: true,
+        ...(responseRanges ? { responseRanges: responseRanges } : {}),
+        responseIncludeGridData: responseIncludeGridData ? responseIncludeGridData : true,
       },
     });
 

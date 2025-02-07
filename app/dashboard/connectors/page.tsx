@@ -85,7 +85,7 @@ export default function ConnectorsPage() {
         throw new Error(response.error);
       }
 
-      if (connector.name = "plaid"){
+      if (connector.name === "plaid"){
         setPlaidToken(response?.authUrl || null);
       } else {
         if (response?.authUrl) {

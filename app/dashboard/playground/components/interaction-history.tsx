@@ -67,6 +67,7 @@ export function InteractionHistory({
           case InteractionType.TASK:
             return {
               instruction: (interaction as Task).instruction,
+              keyInputs: (interaction as Task).keyInputs,
               status: (interaction as Task).status,
               result: (interaction as Task).result
             };
@@ -76,6 +77,7 @@ export function InteractionHistory({
               tasks: (interaction as Plan).tasks.map((task: Task) => ({
                 step: task.step,
                 instruction: task.instruction,
+                keyInputs: task.keyInputs,
                 targetAgentId: task.targetAgentId,
                 status: task.status,
                 error: {

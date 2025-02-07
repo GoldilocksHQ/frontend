@@ -292,10 +292,10 @@ export class ConnectorManager extends Manager {
       })
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error);
-    }
+    // if (!response.ok) {
+      // const error = await response.json();
+      // throw new Error(error.error);
+    // }
 
     return await response.json();
   }

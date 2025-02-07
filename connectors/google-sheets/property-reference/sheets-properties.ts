@@ -124,21 +124,10 @@ export const GridData = {
 export const BooleanRule = {
   type: "object",
   properties: {
-    condition: { 
-      type: "object", 
-      description: "The condition to apply to the rule.",
-      properties: {
-        BooleanCondition
-      }
-    },
-    format: { 
-      type: "object", 
-      description: "The format to apply to the rule.",
-      properties: {
-        CellFormat
-      }
-    }
-  }
+    condition: BooleanCondition,
+    format: CellFormat
+  },
+  required: ["condition", "format"]
 };
 
 export const InterpolationPoint = {

@@ -32,6 +32,7 @@ export enum ThreadStatus {
 export interface AgentTask {
   step: number;
   instruction: string;
+  keyInputs?: string[];
   tools?: (string | undefined)[];
   dependencies: string[];
   requiredAgentId: string;
@@ -111,6 +112,7 @@ export interface Message extends Interaction {
 export interface Task extends Interaction {
   type: InteractionType.TASK;
   instruction: string;
+  keyInputs?: string[];
   planId?: string;
   step?: number;
   dependencies?: string[];
@@ -344,6 +346,7 @@ export class Thread extends ThreadEntity {
         threadId: thread.id,
         type: InteractionType.TASK,
         instruction: taskInfo.instruction || "",
+        keyInputs: taskInfo.keyInputs || [],
         status: InteractionStatus.PENDING,
         targetAgentId: taskInfo.requiredAgentId,
         dependencies: Array.isArray(taskInfo.dependencies)

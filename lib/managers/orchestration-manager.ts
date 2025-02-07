@@ -209,12 +209,15 @@ export class OrchestrationManager extends Manager {
     
     try {
     
-    interaction.status = InteractionStatus.IN_PROGRESS;
-    const agentToolCall = result.result as AgentToolCall;
+      interaction.status = InteractionStatus.IN_PROGRESS;
+      const agentToolCall = result.result as AgentToolCall;
+      
+      thread.appendToolCallInteractionConstruction(interaction, agentToolCall);
+      const toolResult = await this.executeToolCall(agentToolCall, sourceAgent.id);
     
-    thread.appendToolCallInteractionConstruction(interaction, agentToolCall);
-    const toolResult = await this.executeToolCall(agentToolCall, sourceAgent.id);
-    
+      if (toolResult instanceof Error) {
+        throw toolResult;
+      }
       (interaction as ToolCall).result = JSON.stringify(toolResult, null, 2);
       interaction.status = InteractionStatus.SUCCESS;
       
@@ -346,6 +349,10 @@ export class OrchestrationManager extends Manager {
       );
 
       previousTasks.push(await this.executeTask(task, plan, thread, previousTasks, judgementAgent, summaryAgent));
+
+      if (task.status === InteractionStatus.FAILED) {
+        break;
+      }
     }
 
     const summaryText = this.createPlanExecutionSummary(plan, previousTasks);
@@ -463,7 +470,10 @@ export class OrchestrationManager extends Manager {
           (chainType === ChainType.TASK_PLANNING ? `` : `Overall Goal: ${plan.goal}\n\n`) +
           (previousTasks.length > 0 ? `Previous Tasks:\n${previousTasks.join("\n")}\n\n` : "") +
           `Current Task: ${task.instruction}` + 
-          (missing ? `Missing: ${missing.map((m) => "["+m+"]").join(", ")}` : "");
+          (task.keyInputs ? `\nKey Inputs: ${task.keyInputs.join("\n")}` : "") +
+          (missing 
+            ? `\nDon't miss the following: ${missing.map((m) => "["+m+"]").join(", ")}` 
+            : "");
         const decodedTaskMessage = decodeURIComponent(taskMessage);
         return decodedTaskMessage;
       },

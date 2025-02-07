@@ -1,5 +1,5 @@
-import { type ToolDefinition } from "@/services/api/agent-service"
-import { 
+import { type ToolDefinition } from "@/services/api/agent-service";
+import {
   // UpdateSpreadsheetPropertiesRequest,
   // UpdateSheetPropertiesRequest,
   // UpdateDimensionPropertiesRequest,
@@ -10,12 +10,12 @@ import {
   AddSheetRequest,
   DeleteSheetRequest,
   // AutoFillRequest,
-  // CutPasteRequest,
+  CutPasteRequest,
   CopyPasteRequest,
   // MergeCellsRequest,
   // UnmergeCellsRequest,
   // UpdateBordersRequest,
-  UpdateCellsRequest,
+  // UpdateCellsRequest,
   // AddFilterViewRequest,
   // AppendCellsRequest,
   // ClearBasicFilterRequest,
@@ -24,7 +24,7 @@ import {
   // DeleteFilterViewRequest,
   // DuplicateFilterViewRequest,
   DuplicateSheetRequest,
-  FindReplaceRequest,
+  // FindReplaceRequest,
   // InsertDimensionRequest,
   // InsertRangeRequest,
   // MoveDimensionRequest,
@@ -56,7 +56,7 @@ import {
   // AddDimensionGroupRequest,
   // DeleteDimensionGroupRequest,
   // UpdateDimensionGroupRequest,
-  // TrimSheetRequest,
+  // TrimWhitespaceRequest,
   // DeleteDuplicatesRequest,
   // UpdateEmbeddedObjectRequest,
   // AddSlicerRequest,
@@ -68,12 +68,106 @@ import {
   // CancelDataSourceRefreshRequest
 } from "./property-reference/batch-update-properties";
 
+// Batch Update Function Schema Factory
+const BatchUpdateFunctionSchemaFactory = (
+  name: string,
+  description: string,
+  batchUpdateRequests: unknown[],
+  needResponseRanges: boolean = false
+) => {
+  return {
+    name: name,
+    description: description,
+    parameters: {
+      type: "object",
+      properties: {
+        spreadsheetId: {
+          type: "string",
+          description: "The ID of the spreadsheet to update",
+        },
+        ...(needResponseRanges ? {
+          responseRanges: {
+            type: "array",
+            items: { type: "string" },
+            description: "The ranges to return in the response, example format: 'Sheet1!A1:B10'",
+          }
+        } : {}),
+        requests: {
+          type: "array",
+          description: "The requests to update the spreadsheet",
+          items: {
+            type: "object",
+            description: "A single kind of update to apply to a spreadsheet",
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            oneOf: batchUpdateRequests.map((request: any) => {
+              return {
+                type: "object",
+                properties: {
+                  [request.name.charAt(0).toLowerCase() + request.name.slice(1)]: request,
+                },
+              };
+            }),
+          },
+        },
+      },
+      required: ["spreadsheetId", "responseRanges", "requests"],
+    },
+    responseSchema: {
+      type: "json_schema",
+      json_schema: {
+        name: `${name.replace(/([A-Z])/g, "_$1").toLowerCase()}_response`,
+        schema: {
+          type: "object",
+          properties: {
+            responses: {
+              type: "array",
+              items: { type: "object" },
+            },
+          },
+          required: ["responses"],
+          additionalProperties: false,
+        },
+        strict: true,
+      },
+    },
+  };
+};
+
 export const googleSheetsToolDefinition: ToolDefinition = {
   connectorName: "google-sheets",
   functions: [
     {
-      name: "readSheet",
-      description: "Read values from a Google Sheet",
+      name: "getSpreadsheet",
+      description: "Get information of a Google Sheet including the sheets and their properties. Recommended to use this function before any other functions. Required: spreadsheetId",
+      parameters: {
+        type: "object",
+        properties: {
+          spreadsheetId: { 
+            type: "string",
+            description: "The ID of the spreadsheet to get information from"
+          },
+        },
+        required: ["spreadsheetId"],
+      },
+      responseSchema: {
+        type: "json_schema",
+        json_schema: {
+          name: "get_spreadsheet_response",
+          schema: {
+            type: "object",
+            properties: {
+              spreadsheet: { type: "object" },
+            },
+            required: ["spreadsheet"],
+            additionalProperties: false,
+          },
+          strict: true,
+        },
+      },
+    },
+    {
+      name: "readValues",
+      description: "Read values from a Google Sheet. Required: spreadsheetId, range",
       parameters: {
         type: "object",
         properties: {
@@ -84,7 +178,7 @@ export const googleSheetsToolDefinition: ToolDefinition = {
           range: {
             type: "string",
             description:
-              "The A1 notation of the range to read (e.g., 'Sheet1!A1:B10')",
+              "The range to read (example format: 'Sheet1!A1:B10')",
           },
         },
         required: ["spreadsheetId", "range"],
@@ -92,7 +186,7 @@ export const googleSheetsToolDefinition: ToolDefinition = {
       responseSchema: {
         type: "json_schema",
         json_schema: {
-          name: "read_sheet_response",
+          name: "read_values_response",
           schema: {
             type: "object",
             properties: {
@@ -125,8 +219,8 @@ export const googleSheetsToolDefinition: ToolDefinition = {
       },
     },
     {
-      name: "updateSheet",
-      description: "Update values in a Google Sheet",
+      name: "updateValues",
+      description: "Update values in a Google Sheet. Required: spreadsheetId, range, values",
       parameters: {
         type: "object",
         properties: {
@@ -137,7 +231,7 @@ export const googleSheetsToolDefinition: ToolDefinition = {
           range: {
             type: "string",
             description:
-              "The A1 notation of the range to update (e.g., 'Sheet1!A1:B2')",
+              "The range to update (example format: 'Sheet1!A1:B2')",
           },
           values: {
             type: "array",
@@ -155,7 +249,7 @@ export const googleSheetsToolDefinition: ToolDefinition = {
       responseSchema: {
         type: "json_schema",
         json_schema: {
-          name: "update_sheet_response",
+          name: "update_values_response",
           schema: {
             type: "object",
             properties: {
@@ -183,7 +277,7 @@ export const googleSheetsToolDefinition: ToolDefinition = {
     },
     {
       name: "createSheet",
-      description: "Create a new Google Sheet",
+      description: "Create a new Google Sheet. Required: sheetName",
       parameters: {
         type: "object",
         properties: {
@@ -193,8 +287,9 @@ export const googleSheetsToolDefinition: ToolDefinition = {
           },
           parentFolderId: {
             type: "string",
-            description: "The ID of the parent folder where to create the new sheet",
-          }
+            description:
+              "The ID of the parent folder where to create the new sheet",
+          },
         },
         required: ["sheetName"],
       },
@@ -204,7 +299,7 @@ export const googleSheetsToolDefinition: ToolDefinition = {
           name: "create_sheet_response",
           schema: {
             type: "object",
-            properties: { 
+            properties: {
               spreadsheetId: { type: "string" },
               spreadsheetName: { type: "string" },
               spreadsheetUrl: { type: "string" },
@@ -213,895 +308,436 @@ export const googleSheetsToolDefinition: ToolDefinition = {
             additionalProperties: false,
           },
           strict: true,
-        }
-      }
-    },
-    {
-      name: "batchUpdate",
-      description: "Batch update a Google Sheet with multiple sequential requests",
-      parameters: {
-        type: "object",
-        properties: {
-          spreadsheetId: { 
-            type: "string",
-            description: "The ID of the spreadsheet to update",
-          },
-          requests: { 
-            type: "array", 
-            description: "The requests to update the spreadsheet",
-            items: { 
-              type: "object",
-              description: "A single kind of update to apply to a spreadsheet",
-              oneOf: [
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateSpreadsheetProperties: UpdateSpreadsheetPropertiesRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateSheetProperties: UpdateSheetPropertiesRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateDimensionProperties: UpdateDimensionPropertiesRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateNamedRange: UpdateNamedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 repeatCell: RepeatCellRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addNamedRange: AddNamedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteNamedRange: DeleteNamedRangeRequest
-    //               }
-    //             },
-                {
-                  type: "object",
-                  properties: {
-                    addSheet: AddSheetRequest
-                  }
-                },
-                {
-                  type: "object",
-                  properties: {
-                    deleteSheet: DeleteSheetRequest
-                  }
-                },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 autoFill: AutoFillRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 cutPaste: CutPasteRequest
-    //               }
-                //             },
-                {
-                  type: "object",
-                  properties: {
-                    copyPaste: CopyPasteRequest
-                  }
-                },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 mergeCells: MergeCellsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 unmergeCells: UnmergeCellsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateBorders: UpdateBordersRequest
-    //               }
-    //             },
-                {
-                  type: "object",
-                  properties: {
-                    updateCells: UpdateCellsRequest
-                  }
-                },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addFilterView: AddFilterViewRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 appendCells: AppendCellsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 clearBasicFilter: ClearBasicFilterRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDimension: DeleteDimensionRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteEmbeddedObject: DeleteEmbeddedObjectRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteFilterView: DeleteFilterViewRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 duplicateFilterView: DuplicateFilterViewRequest
-    //               }
-    //             },
-                {
-                  type: "object",
-                  properties: {
-                    duplicateSheet: DuplicateSheetRequest
-                  }
-                },
-                {
-                  type: "object",
-                  properties: {
-                    findReplace: FindReplaceRequest
-                  }
-                },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 insertDimension: InsertDimensionRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 insertRange: InsertRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 moveDimension: MoveDimensionRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateEmbeddedObjectPosition: UpdateEmbeddedObjectPositionRequest
-    //               }
-    //             },
-                {
-                  type: "object",
-                  properties: {
-                    pasteData: PasteDataRequest
-                  }
-                },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 textToColumns: TextToColumnsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateFilterView: UpdateFilterViewRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteRange: DeleteRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 appendDimension: AppendDimensionRequest
-    //               }
-    //             },
-                {
-                  type: "object",
-                  properties: {
-                    addConditionalFormatRule: AddConditionalFormatRuleRequest
-                  }
-                },
-                {
-                  type: "object",
-                  properties: {
-                    updateConditionalFormatRule: UpdateConditionalFormatRuleRequest
-                  }
-                },
-                {
-                  type: "object",
-                  properties: {
-                    deleteConditionalFormatRule: DeleteConditionalFormatRuleRequest
-                  }
-                },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addProtectedRange: AddProtectedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateProtectedRange: UpdateProtectedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteProtectedRange: DeleteProtectedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 autoResizeDimensions: AutoResizeDimensionsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addChart: AddChartRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateChartSpec: UpdateChartSpecRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateBanding: UpdateBandingRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addBanding: AddBandingRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteBanding: DeleteBandingRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 createDeveloperMetadata: CreateDeveloperMetadataRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateDeveloperMetadata: UpdateDeveloperMetadataRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDeveloperMetadata: DeleteDeveloperMetadataRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 randomizeRange: RandomizeRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addDimensionGroup: AddDimensionGroupRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDimensionGroup: DeleteDimensionGroupRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateDimensionGroup: UpdateDimensionGroupRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addDataSource: AddDataSourceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateDataSource: UpdateDataSourceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDataSource: DeleteDataSourceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 sortRange: SortRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 setDataValidation: SetDataValidationRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 setBasicFilter: SetBasicFilterRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 trimSheet: TrimSheetRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDuplicates: DeleteDuplicatesRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateEmbeddedObject: UpdateEmbeddedObjectRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addSlicer: AddSlicerRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateSlicerSpec: UpdateSlicerSpecRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 refreshDataSource: RefreshDataSourceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 cancelDataSourceRefresh: CancelDataSourceRefreshRequest
-    //               }
-    //             }
-              ]
-            }
-          },
-          responseRanges: { 
-            type: "array",
-            items: { type: "string" },
-            description: "The ranges to return in the response"
-          }
         },
-        required: ["spreadsheetId", "requests", "responseRanges"]
       },
-      responseSchema: {
-        type: "json_schema",
-        json_schema: {
-          name: "batch_update_response",
-          schema: {
-                  type: "object",
-                  properties: {
-              responses: { 
-                type: "array",
-                items: { type: "object" }
-              }
-            },
-            required: ["responses"],
-            additionalProperties: false
-          },
-          strict: true
-        }
-      }
-    }
-  ]
+    },
+    // Manage Conditional Formatting using the BatchUpdate API
+    BatchUpdateFunctionSchemaFactory(
+      "manageConditionalFormatting",
+      "Add, update or delete conditional formatting rules in a Google Sheet. Required: spreadsheetId, requests",
+      [
+        AddConditionalFormatRuleRequest,
+        UpdateConditionalFormatRuleRequest,
+        DeleteConditionalFormatRuleRequest,
+      ],
+      true
+    ),
+    BatchUpdateFunctionSchemaFactory(
+      "manageSheet",
+      "Add, remove or duplicate sheets in a Google Sheet. Required: spreadsheetId, requests",
+      [
+        AddSheetRequest,
+        DeleteSheetRequest,
+        DuplicateSheetRequest,
+      ],
+      false
+    ),
+    BatchUpdateFunctionSchemaFactory(
+      "cutCopyPasteValues",
+      "Cut, copy or paste values in a Google Sheet. Required: spreadsheetId, requests",
+      [
+        CutPasteRequest,
+        CopyPasteRequest,
+        PasteDataRequest,
+      ],
+      true
+    ),
+  ],
 };
 
+//             {
+//               type: "object",
+//               properties: {
+//                 updateSpreadsheetProperties: UpdateSpreadsheetPropertiesRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateSheetProperties: UpdateSheetPropertiesRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateDimensionProperties: UpdateDimensionPropertiesRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateNamedRange: UpdateNamedRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 repeatCell: RepeatCellRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 addNamedRange: AddNamedRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteNamedRange: DeleteNamedRangeRequest
+//               }
+//             },
 // {
-    //   name: "batchUpdate",
-    //   description: "Batch update a Google Sheet with multiple sequential requests",
-    //   parameters: {
-    //     type: "object",
-    //     properties: {
-    //       spreadsheetId: { 
-    //         type: "string",
-    //         description: "The ID of the spreadsheet to update",
-    //       },
-    //       requests: { 
-    //         type: "array", 
-    //         description: "The requests to update the spreadsheet",
-    //         items: { 
-    //           type: "object",
-    //           description: "A single kind of update to apply to a spreadsheet",
-    //           oneOf: [
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateSpreadsheetProperties: UpdateSpreadsheetPropertiesRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateSheetProperties: UpdateSheetPropertiesRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateDimensionProperties: UpdateDimensionPropertiesRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateNamedRange: UpdateNamedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 repeatCell: RepeatCellRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addNamedRange: AddNamedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteNamedRange: DeleteNamedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addSheet: AddSheetRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteSheet: DeleteSheetRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 autoFill: AutoFillRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 cutPaste: CutPasteRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 copyPaste: CopyPasteRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 mergeCells: MergeCellsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 unmergeCells: UnmergeCellsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateBorders: UpdateBordersRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateCells: UpdateCellsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addFilterView: AddFilterViewRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 appendCells: AppendCellsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 clearBasicFilter: ClearBasicFilterRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDimension: DeleteDimensionRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteEmbeddedObject: DeleteEmbeddedObjectRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteFilterView: DeleteFilterViewRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 duplicateFilterView: DuplicateFilterViewRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 duplicateSheet: DuplicateSheetRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 findReplace: FindReplaceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 insertDimension: InsertDimensionRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 insertRange: InsertRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 moveDimension: MoveDimensionRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateEmbeddedObjectPosition: UpdateEmbeddedObjectPositionRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 pasteData: PasteDataRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 textToColumns: TextToColumnsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateFilterView: UpdateFilterViewRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteRange: DeleteRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 appendDimension: AppendDimensionRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addConditionalFormatRule: AddConditionalFormatRuleRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateConditionalFormatRule: UpdateConditionalFormatRuleRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteConditionalFormatRule: DeleteConditionalFormatRuleRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addProtectedRange: AddProtectedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateProtectedRange: UpdateProtectedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteProtectedRange: DeleteProtectedRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 autoResizeDimensions: AutoResizeDimensionsRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addChart: AddChartRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateChartSpec: UpdateChartSpecRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateBanding: UpdateBandingRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addBanding: AddBandingRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteBanding: DeleteBandingRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 createDeveloperMetadata: CreateDeveloperMetadataRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateDeveloperMetadata: UpdateDeveloperMetadataRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDeveloperMetadata: DeleteDeveloperMetadataRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 randomizeRange: RandomizeRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addDimensionGroup: AddDimensionGroupRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDimensionGroup: DeleteDimensionGroupRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateDimensionGroup: UpdateDimensionGroupRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addDataSource: AddDataSourceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateDataSource: UpdateDataSourceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDataSource: DeleteDataSourceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 sortRange: SortRangeRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 setDataValidation: SetDataValidationRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 setBasicFilter: SetBasicFilterRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 trimSheet: TrimSheetRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 deleteDuplicates: DeleteDuplicatesRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateEmbeddedObject: UpdateEmbeddedObjectRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 addSlicer: AddSlicerRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 updateSlicerSpec: UpdateSlicerSpecRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 refreshDataSource: RefreshDataSourceRequest
-    //               }
-    //             },
-    //             {
-    //               type: "object",
-    //               properties: {
-    //                 cancelDataSourceRefresh: CancelDataSourceRefreshRequest
-    //               }
-    //             }
-    //           ]
-    //         }
-    //       },
-    //       responseRanges: { 
-    //         type: "array",
-    //         items: { type: "string" },
-    //         description: "The ranges to return in the response"
-    //       }
-    //     },
-    //     required: ["spreadsheetId", "requests", "responseRanges"]
-    //   },
-    //   responseSchema: {
-    //     type: "json_schema",
-    //     json_schema: {
-    //       name: "batch_update_response",
-    //       schema: {
-    //               type: "object",
-    //               properties: {
-    //           responses: { 
-    //             type: "array",
-    //             items: { type: "object" }
-    //           }
-    //         },
-    //         required: ["responses"],
-    //         additionalProperties: false
-    //       },
-    //       strict: true
-    //     }
-    //   }
-    // }
+//   type: "object",
+//   properties: {
+//     addSheet: AddSheetRequest
+//   }
+// },
+// {
+//   type: "object",
+//   properties: {
+//     deleteSheet: DeleteSheetRequest
+//   }
+// },
+//             {
+//               type: "object",
+//               properties: {
+//                 autoFill: AutoFillRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 cutPaste: CutPasteRequest
+//               }
+//             },
+// {
+//   type: "object",
+//   properties: {
+//     copyPaste: CopyPasteRequest
+//   }
+// },
+//             {
+//               type: "object",
+//               properties: {
+//                 mergeCells: MergeCellsRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 unmergeCells: UnmergeCellsRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateBorders: UpdateBordersRequest
+//               }
+//             },
+// {
+//   type: "object",
+//   properties: {
+//     updateCells: UpdateCellsRequest
+//   }
+// },
+//             {
+//               type: "object",
+//               properties: {
+//                 addFilterView: AddFilterViewRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 appendCells: AppendCellsRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 clearBasicFilter: ClearBasicFilterRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteDimension: DeleteDimensionRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteEmbeddedObject: DeleteEmbeddedObjectRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteFilterView: DeleteFilterViewRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 duplicateFilterView: DuplicateFilterViewRequest
+//               }
+//             },
+// {
+//   type: "object",
+//   properties: {
+//     duplicateSheet: DuplicateSheetRequest
+//   }
+// },
+// {
+//   type: "object",
+//   properties: {
+//     findReplace: FindReplaceRequest
+//   }
+// },
+//             {
+//               type: "object",
+//               properties: {
+//                 insertDimension: InsertDimensionRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 insertRange: InsertRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 moveDimension: MoveDimensionRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateEmbeddedObjectPosition: UpdateEmbeddedObjectPositionRequest
+//               }
+//             },
+// {
+//   type: "object",
+//   properties: {
+//     pasteData: PasteDataRequest
+//   }
+// },
+//             {
+//               type: "object",
+//               properties: {
+//                 textToColumns: TextToColumnsRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateFilterView: UpdateFilterViewRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteRange: DeleteRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 appendDimension: AppendDimensionRequest
+//               }
+//             },
+// {
+//   type: "object",
+//   properties: {
+//     addConditionalFormatRule: AddConditionalFormatRuleRequest
+//   }
+// },
+// {
+//   type: "object",
+//   properties: {
+//     updateConditionalFormatRule: UpdateConditionalFormatRuleRequest
+//   }
+// },
+// {
+//   type: "object",
+//   properties: {
+//     deleteConditionalFormatRule: DeleteConditionalFormatRuleRequest
+//   }
+// },
+//             {
+//               type: "object",
+//               properties: {
+//                 addProtectedRange: AddProtectedRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateProtectedRange: UpdateProtectedRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteProtectedRange: DeleteProtectedRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 autoResizeDimensions: AutoResizeDimensionsRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 addChart: AddChartRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateChartSpec: UpdateChartSpecRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateBanding: UpdateBandingRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 addBanding: AddBandingRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteBanding: DeleteBandingRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 createDeveloperMetadata: CreateDeveloperMetadataRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateDeveloperMetadata: UpdateDeveloperMetadataRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteDeveloperMetadata: DeleteDeveloperMetadataRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 randomizeRange: RandomizeRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 addDimensionGroup: AddDimensionGroupRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteDimensionGroup: DeleteDimensionGroupRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateDimensionGroup: UpdateDimensionGroupRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 addDataSource: AddDataSourceRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateDataSource: UpdateDataSourceRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteDataSource: DeleteDataSourceRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 sortRange: SortRangeRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 setDataValidation: SetDataValidationRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 setBasicFilter: SetBasicFilterRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 trimSheet: TrimSheetRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 deleteDuplicates: DeleteDuplicatesRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateEmbeddedObject: UpdateEmbeddedObjectRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 addSlicer: AddSlicerRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 updateSlicerSpec: UpdateSlicerSpecRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 refreshDataSource: RefreshDataSourceRequest
+//               }
+//             },
+//             {
+//               type: "object",
+//               properties: {
+//                 cancelDataSourceRefresh: CancelDataSourceRefreshRequest
+//               }
+//             }
