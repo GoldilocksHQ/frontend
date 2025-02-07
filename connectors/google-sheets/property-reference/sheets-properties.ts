@@ -1,3 +1,4 @@
+import { CellData, CellFormat } from "./cell-properties";
 import {
   ColorStyle,
   GridRange,
@@ -8,7 +9,8 @@ import {
   DataSourceColumnReference,
   DataSourceColumn,
   DataExecutionStatus,
-  Color
+  Color,
+  BooleanCondition
 } from "./other-properties";
 
 
@@ -74,7 +76,12 @@ export const RowData = {
   properties: {
     values: {
       type: "array",
-      items: { type: "object", ref: "CellData" }
+      items: { 
+        type: "object",  
+        properties: {
+          CellData
+        }
+      }
     }
   }
 };
@@ -117,8 +124,20 @@ export const GridData = {
 export const BooleanRule = {
   type: "object",
   properties: {
-    condition: { type: "object", ref: "BooleanCondition" },
-    format: { type: "object", ref: "CellFormat" }
+    condition: { 
+      type: "object", 
+      description: "The condition to apply to the rule.",
+      properties: {
+        BooleanCondition
+      }
+    },
+    format: { 
+      type: "object", 
+      description: "The format to apply to the rule.",
+      properties: {
+        CellFormat
+      }
+    }
   }
 };
 
@@ -128,6 +147,7 @@ export const InterpolationPoint = {
     colorStyle: ColorStyle,
     type: {
       type: "string",
+      description: "The type of the interpolation point.",
       enum: [
         "INTERPOLATION_POINT_TYPE_UNSPECIFIED",
         "MIN",
@@ -137,7 +157,10 @@ export const InterpolationPoint = {
         "PERCENTILE"
       ]
     },
-    value: { type: "string" }
+    value: { 
+      type: "string",
+      description: "The value of the interpolation point."
+    }
   }
 };
 
@@ -155,6 +178,7 @@ export const ConditionalFormatRule = {
   properties: {
     ranges: {
       type: "array",
+      description: "The ranges to apply the rule to. At least one range must be specified.",
       items: GridRange
     },
     booleanRule: BooleanRule,

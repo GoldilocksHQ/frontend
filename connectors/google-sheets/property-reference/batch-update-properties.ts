@@ -229,6 +229,7 @@ export const UpdateCellsRequest = {
   properties: {
     rows: {
       type: "array",
+      description: "The rows to update. At least one row must be specified.",
       items: RowData
     },
     fields: {
@@ -285,10 +286,22 @@ export const AutoFillRequest = {
 export const DuplicateSheetRequest = {
   type: "object",
   properties: {
-    sourceSheetId: { type: "integer" },
-    insertSheetIndex: { type: "integer" },
-    newSheetId: { type: "integer" },
-    newSheetName: { type: "string" }
+    sourceSheetId: { 
+      type: "integer",
+      description: "The sheet ID of the sheet to duplicate."
+    },
+    insertSheetIndex: { 
+      type: "integer",
+      description: "The index of the sheet to insert the new sheet at."
+    },
+    newSheetId: { 
+      type: "integer",
+      description: "The ID of the new sheet."
+    },
+    newSheetName: { 
+      type: "string",
+      description: "The name of the new sheet."
+    }
   },
   required: ["sourceSheetId"]
 };
@@ -454,7 +467,10 @@ export const AddConditionalFormatRuleRequest = {
   type: "object",
   properties: {
     rule: ConditionalFormatRule,
-    index: { type: "integer" }
+    index: { 
+      type: "integer",
+      description: "The index of the rule to add."
+    }
   },
   required: ["rule", "index"]
 };
@@ -462,10 +478,19 @@ export const AddConditionalFormatRuleRequest = {
 export const UpdateConditionalFormatRuleRequest = {
   type: "object",
   properties: {
-    sheetId: { type: "integer" },
-    index: { type: "integer" },
+    sheetId: { 
+      type: "integer",
+      description: "The sheet ID of the rule to update."
+    },
+    index: { 
+      type: "integer",
+      description: "The index of the rule to update."
+    },
     rule: ConditionalFormatRule,
-    newIndex: { type: "integer" }
+    newIndex: { 
+      type: "integer",
+      description: "The index of the rule to update."
+    }
   },
   required: ["index", "sheetId"],
   oneOf: [
@@ -477,8 +502,14 @@ export const UpdateConditionalFormatRuleRequest = {
 export const DeleteConditionalFormatRuleRequest = {
   type: "object",
   properties: {
-    sheetId: { type: "integer" },
-    index: { type: "integer" }
+    sheetId: { 
+      type: "integer",
+      description: "The sheet ID of the rule to delete."
+    },
+    index: { 
+      type: "integer",
+      description: "The index of the rule to delete."
+    }
   },
   required: ["sheetId", "index"]
 };
@@ -806,15 +837,39 @@ export const DuplicateFilterViewRequest = {
 export const FindReplaceRequest = {
   type: "object",
   properties: {
-    find: { type: "string" },
-    replacement: { type: "string" },
-    matchCase: { type: "boolean" },
-    matchEntireCell: { type: "boolean" },
-    searchByRegex: { type: "boolean" },
-    includeFormulas: { type: "boolean" },
+    find: { 
+      type: "string",
+      description: "The text to find."
+    },
+    replacement: { 
+      type: "string",
+      description: "The text to replace the found text with."
+    },
+    matchCase: { 
+      type: "boolean",
+      description: "Whether to match the case of the text."
+    },
+    matchEntireCell: { 
+      type: "boolean",
+      description: "Whether to match the entire cell."
+    },
+    searchByRegex: { 
+      type: "boolean",
+      description: "Whether to search by regex."
+    },
+    includeFormulas: { 
+      type: "boolean",
+      description: "Whether to include formulas."
+    },
     range: GridRange,
-    sheetId: { type: "integer" },
-    allSheets: { type: "boolean" }
+    sheetId: { 
+      type: "integer",
+      description: "The sheet ID of the sheet to search."
+    },
+    allSheets: { 
+      type: "boolean",
+      description: "Whether to search all sheets."
+    }
   },
   oneOf: [
     { required: ["range"] },
@@ -849,10 +904,23 @@ export const PasteDataRequest = {
   type: "object",
   properties: {
     coordinate: GridCoordinate,
-    data: { type: "string" },
-    type: { type: "string", ref: "PasteType" },
-    delimiter: { type: "string" },
-    html: { type: "boolean" }
+    data: { 
+      type: "string", 
+      description: "The data to paste. At least one data must be specified." 
+    },
+    type: { 
+      type: "string", 
+      ref: "PasteType",
+      description: "The type of paste to perform."
+    },
+    delimiter: { 
+      type: "string",
+      description: "The delimiter to use for the paste."
+    },
+    html: { 
+      type: "boolean",
+      description: "Whether to paste the data as HTML."
+    }
   },
   required: ["coordinate", "data", "type"],
   oneOf: [

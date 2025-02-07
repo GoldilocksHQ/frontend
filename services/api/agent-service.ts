@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 import { ChatCompletionCreateParamsNonStreaming, ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
-import { googleSheetsToolDefinition, googleDriveToolDefinition, googleDocsToolDefinition } from '@/connectors/function-schema';
+import { googleSheetsToolDefinition } from '@/connectors/google-sheets/function-schema';
+import { googleDriveToolDefinition } from '@/connectors/google-drive/function-schema';
+import { googleDocsToolDefinition } from '@/connectors/google-docs/function-schema';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,

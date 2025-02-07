@@ -274,11 +274,26 @@ export const GridRange = {
   type: "object",
   description: "A range on a sheet. All indexes are zero-based",
   properties: {
-    sheetId: { type: "integer" },
-    startRowIndex: { type: "integer" },
-    endRowIndex: { type: "integer" },
-    startColumnIndex: { type: "integer" },
-    endColumnIndex: { type: "integer" }
+    sheetId: { 
+      type: "integer",
+      description: "The sheet ID of the range"
+    },
+    startRowIndex: { 
+      type: "integer",
+      description: "The start row index of the range"
+    },
+    endRowIndex: { 
+      type: "integer",
+      description: "The end row index of the range"
+    },
+    startColumnIndex: { 
+      type: "integer",
+      description: "The start column index of the range"
+    },
+    endColumnIndex: { 
+      type: "integer",
+      description: "The end column index of the range"
+    }
   }
 };
 
@@ -421,9 +436,18 @@ export const GridCoordinate = {
   type: "object",
   description: "A coordinate in a sheet. All indexes are zero-based",
   properties: {
-    sheetId: { type: "integer" },
-    rowIndex: { type: "integer" },
-    columnIndex: { type: "integer" }
+    sheetId: { 
+      type: "integer",
+      description: "The sheet ID of the coordinate"
+    },
+    rowIndex: { 
+      type: "integer",
+      description: "The row index of the coordinate"
+    },
+    columnIndex: { 
+      type: "integer",
+      description: "The column index of the coordinate"
+    }
   }
 }
 
@@ -461,4 +485,3 @@ export const EmbeddedObjectPosition = {
     newSheet: { type: "boolean" }
   }
 }
-
