@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { AgentCard } from "./components/agent-card";
 import { AgentConfigSidebar } from "./components/agent-config-sidebar";
@@ -23,6 +23,7 @@ import {
   MessageRole,
 } from "@/lib/core/thread";
 import { ErrorBoundary } from "@/app/components/common/error-boundary";
+import { debounce } from 'lodash-es';
 
 export default function PlaygroundPage() {
   const { uiState: ui, agentState: agent } = useStores();
@@ -126,6 +127,63 @@ export default function PlaygroundPage() {
       setInteractionHistory([]);
     }
   }, [agent.selectedAgent, conversationManager]);
+
+  // Memoize message filtering
+  const { messages: memoizedMessages, interactionHistory: memoizedInteractionHistory } = useMemo(() => {
+    if (!agent.selectedAgent || !conversationManager) {
+      return { messages: [], interactionHistory: [] };
+    }
+
+    const agentInteractions = conversationManager.getInteractionsByAgent(
+      agent.selectedAgent.id
+    );
+    
+    const messageHistory = agentInteractions
+      .filter(
+        (interaction) =>
+          interaction.type === InteractionType.MESSAGE &&
+          (interaction as Message).content !== "" &&
+          // either the message is a user message or an assistant message with no target agent id, i.e. to the user
+          ((interaction as Message).role == MessageRole.USER ||
+            ((interaction as Message).role == MessageRole.ASSISTANT &&
+              (interaction as Message).sourceAgentId == agent.selectedAgent!.id))
+      )
+      .sort((a, b) => a.createdAt - b.createdAt) as Message[];
+
+    const agentThreads = conversationManager.getThreadsByAgent(
+      agent.selectedAgent.id
+    );
+    
+    const agentThreadsInteractions = agentThreads
+      .flatMap((thread) => thread.interactions)
+      .sort((a, b) => a.createdAt - b.createdAt);
+
+    return { 
+      messages: messageHistory, 
+      interactionHistory: agentThreadsInteractions 
+    };
+  }, [agent.selectedAgent, conversationManager]);
+
+  // Debounce state updates
+  const debouncedSetMessages = useMemo(
+    () => debounce(setMessages, 300, { leading: true, trailing: true }),
+    []
+  );
+
+  const debouncedSetInteractionHistory = useMemo(
+    () => debounce(setInteractionHistory, 300, { leading: true, trailing: true }),
+    []
+  );
+
+  useEffect(() => {
+    debouncedSetMessages(memoizedMessages);
+    debouncedSetInteractionHistory(memoizedInteractionHistory);
+    
+    return () => {
+      debouncedSetMessages.cancel();
+      debouncedSetInteractionHistory.cancel();
+    };
+  }, [memoizedMessages, memoizedInteractionHistory, debouncedSetMessages, debouncedSetInteractionHistory]);
 
   const handleAddAgent = async () => {
     if (!agentManager) {

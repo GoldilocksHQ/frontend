@@ -20,6 +20,8 @@ type FunctionArgs = {
   values?: string[][];
   sheetName?: string;
   parentFolderId?: string;
+  requests?: sheets_v4.Schema$Request[];
+  responseRanges?: string[];
 };
 
 export async function handleFunction(
@@ -57,6 +59,13 @@ export async function handleFunction(
           return { success: false, result: null, error: 'Sheet name is required' };
         }
         return await createSheet(oauth2Client, args.sheetName);
+      }
+      case 'batchUpdate': {
+        if (!args.spreadsheetId || !args.requests || !args.responseRanges) {
+          return { success: false, result: null, error: 'Spreadsheet ID, requests, and response ranges are required' };
+        }
+
+        return await batchUpdate(oauth2Client, args.spreadsheetId, args.requests, args.responseRanges);
       }
       default:
         return { success: false, result: null, error: `Unknown function: ${functionName}` };
@@ -125,6 +134,31 @@ export async function createSheet(
     return { success: true, result: response.data };
   } catch (error) {
     console.error("Error creating sheet:", error);
+    return { success: false, result: null, error: String(error) };
+  }
+}
+
+export async function batchUpdate(
+  oauth2Client: OAuth2Client,
+  spreadsheetId: string,
+  requests: sheets_v4.Schema$Request[],
+  responseRanges: string[]
+): Promise<FunctionResult<sheets_v4.Schema$BatchUpdateSpreadsheetResponse | null>> {
+  try {
+    const sheets = google.sheets({ version: "v4", auth: oauth2Client });
+    const response = await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: requests,
+        includeSpreadsheetInResponse: true,
+        responseRanges: responseRanges,
+        responseIncludeGridData: true,
+      },
+    });
+
+    return { success: true, result: response.data , error: undefined };
+  } catch (error) {
+    console.error("Error batch updating:", error);
     return { success: false, result: null, error: String(error) };
   }
 }

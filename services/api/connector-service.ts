@@ -4,7 +4,10 @@ import { handleFunction as handleGoogleDriveFunction } from "@/connectors/google
 import { handleFunction as handleGoogleDocsFunction } from "@/connectors/google-docs/connector";
 import { handleFunction as handlePlaidFunction } from "@/connectors/plaid/connector";
 import { UUID } from "crypto";
-import { googleDriveToolDefinition, googleDocsToolDefinition, googleSheetsToolDefinition, plaidToolDefinition } from "@/connectors/function-schema";
+import { googleSheetsToolDefinition } from "@/connectors/google-sheets/function-schema";
+import { googleDriveToolDefinition } from "@/connectors/google-drive/function-schema";
+import { googleDocsToolDefinition } from "@/connectors/google-docs/function-schema";
+import { plaidToolDefinition } from "@/connectors/plaid/function-schema";
 import { ToolDefinition, APIError } from "./agent-service";
 
 export interface ConnectorFunction {

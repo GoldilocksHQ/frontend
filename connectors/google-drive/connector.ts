@@ -13,6 +13,7 @@ type FunctionArgs = {
   query?: string;
   pageSize?: number;
   pageToken?: string;
+  folderId?: string;
   folderName?: string;
   parentFolderId?: string;
   fileName?: string;
@@ -40,6 +41,12 @@ export async function handleFunction(
         }
         return await listFiles(userId, args.query, args.pageSize, args.pageToken);
       }
+      case 'listFilesByFolderId': {
+        if (!args.folderId) {
+          return {success: false, result: null, error: 'Folder ID is required'};
+        }
+        return await listFilesByFolderId(userId, args.folderId, args.pageSize, args.pageToken);
+      } 
       case 'createFolder': {
         if (!args.folderName) {
           return {success: false, result: null, error: 'Folder name is required'};
@@ -110,6 +117,40 @@ async function listFiles(
     return { success: true, result: response.data };
   } catch (error) {
     console.error('Error listing files:', error);
+    return { success: false, result: null, error: String(error) };
+  }
+}
+
+async function listFilesByFolderId(
+  userId: UUID,
+  folderId: string,
+  pageSize?: number,
+  pageToken?: string
+): Promise<FunctionResult<drive_v3.Schema$FileList>> {
+  try {
+    const credentials = await retrieveCredentials(userId, CONNECTOR_NAME);
+    if (!credentials.success || !credentials.credentials) {
+      return { success: false, result: null, error: credentials.error || "No valid credentials" };
+    }
+
+    const auth = await createOAuth2Client();
+    auth.setCredentials({
+      access_token: credentials.credentials.access_token,
+      refresh_token: credentials.credentials.refresh_token
+    });
+
+    const drive = google.drive({ version: 'v3', auth });
+
+    const response = await drive.files.list({
+      q: `'${folderId}' in parents and trashed = false`,
+      pageSize: pageSize || 10,
+      pageToken: pageToken || undefined,
+      fields: 'nextPageToken, files(id, name, mimeType, parents, owners, createdTime, modifiedTime, size, fullFileExtension)',
+    });
+
+    return { success: true, result: response.data };
+  } catch (error) {
+    console.error('Error listing files by folder ID:', error);
     return { success: false, result: null, error: String(error) };
   }
 }

@@ -183,7 +183,13 @@ export class OrchestrationManager extends Manager {
     try {
       return await handler(result, thread, sourceAgent, targetAgent);
     } catch (error) {
-      return this.handleHandlerError(resultType, error, thread, sourceAgent);
+      const errorInteraction = this.interactionFactory.create(
+        resultType,
+        thread,
+        sourceAgent.id
+      );
+      this.errorService.handleInteractionError(errorInteraction, error, thread);
+      return errorInteraction;
     }
   }
 
@@ -215,8 +221,10 @@ export class OrchestrationManager extends Manager {
       return interaction;
     } catch (error) {
       (interaction as ToolCall).status = InteractionStatus.FAILED;
-      return this.handleHandlerError(InteractionType.TOOL_CALL, error, thread, sourceAgent);
+      // return this.handleHandlerError(InteractionType.TOOL_CALL, error, thread, sourceAgent);
+      this.errorService.handleInteractionError(interaction, error, thread);
     }
+    return interaction;
   }
 
   private handlePlanInteraction(
@@ -607,21 +615,6 @@ export class OrchestrationManager extends Manager {
     this.errorService.logOrchestrationError(error as Error, {
       threadId: thread.id
     });
-  }
-
-  private handleHandlerError(
-    resultType: InteractionType,
-    error: unknown,
-    thread: Thread,
-    sourceAgent: Agent
-  ): Interaction {
-    const errorInteraction = this.interactionFactory.create(
-      resultType,
-      thread,
-      sourceAgent.id
-    );
-    this.errorService.handleInteractionError(errorInteraction, error, thread);
-    return errorInteraction;
   }
 }
 

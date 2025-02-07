@@ -1,7 +1,7 @@
 import { Interaction, InteractionType, Judgement, Message, ToolCall, Plan, Task } from "@/lib/core/thread";
 import { AgentManager } from "@/lib/managers/agent-manager";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import React from "react";
 import { Virtuoso } from "react-virtuoso";
 
@@ -45,7 +45,7 @@ export function InteractionHistory({
     }
   }, [expandedInteractionId]);
 
-  const formatInteractionContent = (interaction: Interaction) => {
+  const formatInteractionContent = useCallback((interaction: Interaction) => {
     try {
       const content = (() => {
         if (interaction.error) {
@@ -136,7 +136,7 @@ export function InteractionHistory({
     } catch (error) {
       return `Error formatting content: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
-  };
+  }, [agentManager]);
 
   const formatTaskOutput = (content: string) => {
     if (!content.includes('Completed Task')) return content;
@@ -195,6 +195,60 @@ export function InteractionHistory({
     }
   );
 
+  const InteractionItem = memo(({ 
+    interaction,
+    expanded,
+    onToggle 
+  }: {
+    interaction: Interaction
+    expanded: boolean
+    onToggle: () => void
+  }) => {
+    const content = useMemo(
+      () => formatInteractionContent(interaction),
+      [interaction, formatInteractionContent]
+    );
+
+    return (
+      <div className="bg-muted/50 p-4 rounded-lg space-y-2 max-w-[calc(60vw-3rem)]">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">
+              {interaction.sourceAgentId ? 
+                agentManager.getAgent(interaction.sourceAgentId)?.name || interaction.sourceAgentId 
+                : "You"} 
+              {"->"}
+              {interaction.targetAgentId ? 
+                agentManager.getAgent(interaction.targetAgentId)?.name || interaction.targetAgentId 
+                : "You"}
+            </p>
+            <div className="text-xs text-muted-foreground">
+              <span>Type: {interaction.type}</span>
+              <span className="mx-2">•</span>
+              <span>
+                {new Date(interaction.createdAt).toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <button 
+            onClick={onToggle}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? '▼' : '▶'}
+          </button>
+        </div>
+        <div className={`overflow-hidden transition-all ${
+          expanded ? 'opacity-100' : 'max-h-0 opacity-0'
+        }`}>
+          <div className="pt-2 text-sm font-mono whitespace-pre-wrap break-words 
+            overflow-x-auto bg-background/50 p-2 rounded">
+            {content}
+          </div>
+        </div>
+      </div>
+    );
+  });
+  InteractionItem.displayName = "InteractionItem";
   return (
     <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
       <DialogContent className="max-w-[60vw] max-h-[80vh] h-[80vh] flex flex-col">
@@ -225,53 +279,16 @@ export function InteractionHistory({
             data={filteredInteractions}
             initialTopMostItemIndex={filteredInteractions.length - 1}
             itemContent={(index, interaction) => (
-              <div
-                key={interaction.id}
-                className="bg-muted/50 p-4 rounded-lg space-y-2 max-w-[calc(60vw-3rem)]"
-              >
-                {/* Header with expand/collapse */}
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">
-                      {interaction.sourceAgentId ? 
-                        agentManager.getAgent(interaction.sourceAgentId)?.name || interaction.sourceAgentId 
-                        : "You"} 
-                      {"->"}
-                      {interaction.targetAgentId ? 
-                        agentManager.getAgent(interaction.targetAgentId)?.name || interaction.targetAgentId 
-                        : "You"}
-                    </p>
-                    <div className="text-xs text-muted-foreground">
-                      <span>Type: {interaction.type}</span>
-                      <span className="mx-2">•</span>
-                      <span>
-                        {new Date(interaction.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setExpandedInteractionId(
-                      expandedInteractionId === interaction.id ? null : interaction.id
-                    )}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {expandedInteractionId === interaction.id ? '▼' : '▶'}
-                  </button>
-                </div>
-
-                {/* Collapsible Content */}
-                <div className={`overflow-hidden transition-all ${
-                  expandedInteractionId === interaction.id 
-                    ? 'opacity-100' 
-                    : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="pt-2 text-sm font-mono whitespace-pre-wrap break-words 
-                    overflow-x-auto bg-background/50 p-2 rounded">
-                    {formatInteractionContent(interaction)}
-                  </div>
-                </div>
-              </div>
+              <InteractionItem
+                interaction={interaction}
+                expanded={expandedInteractionId === interaction.id}
+                onToggle={() => setExpandedInteractionId(
+                  expandedInteractionId === interaction.id ? null : interaction.id
+                )}
+              />
             )}
+            overscan={500}
+            increaseViewportBy={{ top: 200, bottom: 200 }}
             components={{
               List: VirtuosoList
             }}
