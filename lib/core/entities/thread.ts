@@ -1,9 +1,17 @@
-import { useThreadStore } from "../stores/thread-store";
+import { useThreadStore } from "../../stores/thread-store";
 
 export enum MessageRole {
   USER = "user",
   ASSISTANT = "assistant",
   SYSTEM = "system",
+}
+
+export enum InteractionSource {
+  USER = "user",
+}
+
+export enum InteractionTarget {
+  USER = "user",
 }
 
 export enum InteractionType {
@@ -27,6 +35,11 @@ export enum ThreadStatus {
   COMPLETED = "completed",
   FAILED = "failed",
   ARCHIVED = "archived",
+}
+
+export interface AgentMessage {
+  role: MessageRole;
+  content: string;
 }
 
 export interface AgentTask {
@@ -91,8 +104,8 @@ export interface BaseEntity {
 export interface Interaction extends BaseEntity {
   threadId: string;
   type: InteractionType;
-  sourceAgentId?: string;
-  targetAgentId?: string;
+  sourceAgentId: string;
+  targetAgentId: string;
   status: InteractionStatus;
   error?: InteractionError;
 }
@@ -113,8 +126,8 @@ export interface Task extends Interaction {
   type: InteractionType.TASK;
   instruction: string;
   keyInputs?: string[];
-  planId?: string;
-  step?: number;
+  planId: string;
+  step: number;
   dependencies?: string[];
   result?: unknown;
 }
@@ -241,22 +254,6 @@ export class Thread extends ThreadEntity {
     return this.interactions.at(-1) as Interaction;
   }
 
-  getInteraction(id: string): Interaction | undefined {
-    return this.interactions.find((interaction) => interaction.id === id);
-  }
-
-  getInteractionsByType(type: InteractionType): Interaction[] {
-    return this.interactions.filter((interaction) => interaction.type === type);
-  }
-
-  getInteractionsByAgent(agentId: string): Interaction[] {
-    return this.interactions.filter(
-      (interaction) =>
-        interaction.sourceAgentId === agentId ||
-        interaction.targetAgentId === agentId
-    );
-  }
-
   updateStatus(status: ThreadStatus, error?: string): void {
     this.status = status;
     if (error) {
@@ -264,22 +261,6 @@ export class Thread extends ThreadEntity {
       this.lastErrorAt = Date.now();
     }
     this.update();
-    useThreadStore.getState().updateThread(this.id, this);
-  }
-
-  applyUpdate(update: ThreadUpdate): void {
-    if (update.status !== undefined) {
-      this.status = update.status;
-    }
-    if (update.activeAgentId !== undefined) {
-      this.activeAgentId = update.activeAgentId;
-    }
-    if (update.error !== undefined) {
-      this.error = update.error;
-      this.lastErrorAt = Date.now();
-    }
-
-    this.update(update.metadata);
     useThreadStore.getState().updateThread(this.id, this);
   }
 
@@ -292,19 +273,19 @@ export class Thread extends ThreadEntity {
     };
   }
 
-  // Utility functions for constructing new interactions
+  // Factory pattern for creating new interactions
   constructNewInteraction(
     interactionType: InteractionType,
-    sourceAgentId?: string,
-    targetAgentId?: string
+    sourceAgentId: string,
+    targetAgentId: string
   ): Interaction {
     const interaction: Interaction = {
       ...this.createBaseEntity(),
       threadId: this.id,
       status: InteractionStatus.PENDING,
       type: interactionType,
-      sourceAgentId: sourceAgentId,
-      targetAgentId: targetAgentId,
+      sourceAgentId: sourceAgentId, // The agent that created the interaction
+      targetAgentId: targetAgentId, // The agent that the interaction's content is targeted at
     };
     this.addInteraction(interaction);
     return interaction;
@@ -348,7 +329,8 @@ export class Thread extends ThreadEntity {
         instruction: taskInfo.instruction || "",
         keyInputs: taskInfo.keyInputs || [],
         status: InteractionStatus.PENDING,
-        targetAgentId: taskInfo.requiredAgentId,
+        sourceAgentId: interaction.sourceAgentId, // The agent that created the plan interaction
+        targetAgentId: taskInfo.requiredAgentId, // The agent that the the task's content is targeted at
         dependencies: Array.isArray(taskInfo.dependencies)
           ? taskInfo.dependencies.map(String)
           : [],
@@ -384,12 +366,11 @@ export class Thread extends ThreadEntity {
   }
 
   appendMessageConstruction(
-    interaction: Message,
-    role: MessageRole,
-    content: string
+    interaction: Interaction,
+    message: AgentMessage
   ): Message {
-    (interaction as Message).role = role;
-    (interaction as Message).content = JSON.stringify(content);
+    (interaction as Message).role = message.role;
+    (interaction as Message).content = JSON.stringify(message.content);
     return interaction as Message;
   }
 
@@ -410,5 +391,23 @@ export class Thread extends ThreadEntity {
     (interaction as Interaction).error = interactionError;
     (interaction as Interaction).status = InteractionStatus.FAILED;
     return interaction as Message;
+  }
+
+
+  // Utility functions for getting interactions
+  getInteraction(id: string): Interaction | undefined {
+    return this.interactions.find((interaction) => interaction.id === id);
+  }
+
+  getInteractionsByType(type: InteractionType): Interaction[] {
+    return this.interactions.filter((interaction) => interaction.type === type);
+  }
+
+  getInteractionsByAgent(agentId: string): Interaction[] {
+    return this.interactions.filter(
+      (interaction) =>
+        interaction.sourceAgentId === agentId ||
+        interaction.targetAgentId === agentId
+    );
   }
 }

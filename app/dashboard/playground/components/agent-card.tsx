@@ -1,8 +1,8 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
-import { Agent } from "@/lib/managers/agent-manager";
-import { cn } from "@/lib/utils";
+import { Agent } from "@/lib/agents/agent-manager";
+import { cn } from "@/lib/utils/utils";
 
 interface AgentCardProps {
   agent: Agent;

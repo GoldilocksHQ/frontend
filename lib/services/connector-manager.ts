@@ -1,8 +1,8 @@
-import { Manager } from "../core/base-manager";
-import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { APIKeyManager } from "./api-key-manager";
-import { ToolManager, ToolDefinition } from "./tool-manager";
-import { ManagerStatus } from "../core/base-manager";
+import { Manager } from "../core/managers/base-manager";
+import { ErrorManager, ErrorSeverity } from "../core/managers/error-manager";
+import { APIKeyManager } from "../auth/api-key-manager";
+import { ToolManager, ToolDefinition } from "../agents/tool-manager";
+import { ManagerStatus } from "../core/managers/base-manager";
 
 export interface Connector {
   id: string;

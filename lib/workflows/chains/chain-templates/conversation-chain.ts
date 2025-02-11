@@ -77,7 +77,7 @@ export class ConversationChain extends BaseChain {
       if (this.memory) {
         await this.memory.saveContext(
           { input: values.input.content },
-          { output: response.content as string }
+          { output: conversationResponse}
         );
       }
 

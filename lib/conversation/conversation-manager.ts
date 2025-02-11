@@ -1,13 +1,13 @@
-import { Manager } from "../core/base-manager";
+import { Manager } from "../core/managers/base-manager";
 import { 
   Thread, 
   ThreadStatus, 
   Interaction,
-} from "../core/thread";
-import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { ManagerStatus } from "../core/base-manager";
+} from "../core/entities/thread";
+import { ErrorManager, ErrorSeverity } from "../core/managers/error-manager";
+import { ManagerStatus } from "../core/managers/base-manager";
 import { useThreadStore } from "../stores/thread-store";
-import { OrchestrationManager } from "./orchestration-manager";
+import { OrchestrationManager } from "../orchestration/orchestration-manager";
 
 /**
  * ConversationManager orchestrates the conversation flow and manages threads.
@@ -49,6 +49,8 @@ export class ConversationManager extends Manager {
         const rehydratedThread = this.rehydrateThread(thread);
         this.threads.set(id, rehydratedThread);
       }
+
+      await this.orchestrationManager.initialize();
 
       this.setStatus(ManagerStatus.READY);
     } catch (error) {

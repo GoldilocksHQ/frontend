@@ -1,6 +1,6 @@
 import { create, StateCreator } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Chain } from '../managers/chain-manager'
+import { Chain } from '../workflows/chains/chain-manager'
 import { customStorage, logMiddleware } from './middleware'
 
 interface ChainStoreState {

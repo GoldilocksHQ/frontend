@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Thread, Message, ThreadStatus } from '../core/thread'
+import { Thread, Message, ThreadStatus } from '../core/entities/thread'
 import { customStorage, logMiddleware } from './middleware'
 import { StateCreator } from 'zustand'
 

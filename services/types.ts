@@ -1,4 +1,4 @@
-import { ToolDefinition } from "@/lib/managers/tool-manager";
+import { ToolDefinition } from "@/lib/agents/tool-manager";
 
 export interface Connector {
   id: string;

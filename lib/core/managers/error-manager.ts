@@ -1,6 +1,5 @@
 import { UUID } from "crypto";
-import { Manager } from "../core/base-manager";
-import { ManagerStatus } from "../core/base-manager";
+import { Manager, ManagerStatus } from "./base-manager";
 
 export interface ErrorContext {
   timestamp: number;
@@ -21,6 +20,35 @@ export interface ErrorFilter {
   severity?: ErrorSeverity;
   startTime?: number;
   endTime?: number;
+}
+
+// Error type hierarchy
+export class OrchestrationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OrchestrationError';
+  }
+}
+
+export class DependencyError extends OrchestrationError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DependencyError';
+  }
+}
+
+export class ValidationError extends OrchestrationError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
+export class ConcurrencyError extends OrchestrationError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConcurrencyError';
+  }
 }
 
 export class ManagedError extends Error {

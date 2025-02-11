@@ -1,13 +1,13 @@
 import { History } from "lucide-react";
 import { useState, useRef, useEffect, memo, useCallback, useMemo } from "react";
-import { Interaction, Message, MessageRole } from "@/lib/core/thread";
+import { Interaction, Message, MessageRole } from "@/lib/core/entities/thread";
 import { InteractionHistory } from "./interaction-history";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 import React from "react";
-import { AgentManager } from "@/lib/managers/agent-manager";
+import { AgentManager } from "@/lib/agents/agent-manager";
 import { Virtuoso } from "react-virtuoso";
 
 interface ChatInterfaceProps {

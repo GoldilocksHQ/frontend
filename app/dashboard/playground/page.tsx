@@ -6,22 +6,24 @@ import { AgentCard } from "./components/agent-card";
 import { AgentConfigSidebar } from "./components/agent-config-sidebar";
 import { ChatInterface } from "./components/chat-interface";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Trash2 } from "lucide-react";
 import {
   LoadingState,
   LoadingWrapper,
 } from "@/app/components/common/loading-state";
-import { AgentManager } from "@/lib/managers/agent-manager";
-import { ConversationManager } from "@/lib/managers/conversation-manager";
+import { AgentManager } from "@/lib/agents/agent-manager";
+import { ConversationManager } from "@/lib/conversation/conversation-manager";
 import { useStores } from "@/lib/stores";
-import { ConnectorManager } from "@/lib/managers/connector-manager";
+import { ConnectorManager } from "@/lib/services/connector-manager";
 import {
   Interaction,
+  InteractionSource,
   InteractionStatus,
+  InteractionTarget,
   InteractionType,
   Message,
   MessageRole,
-} from "@/lib/core/thread";
+} from "@/lib/core/entities/thread";
 import { ErrorBoundary } from "@/app/components/common/error-boundary";
 import { debounce } from 'lodash-es';
 
@@ -142,11 +144,10 @@ export default function PlaygroundPage() {
       .filter(
         (interaction) =>
           interaction.type === InteractionType.MESSAGE &&
-          (interaction as Message).content !== "" &&
-          // either the message is a user message or an assistant message with no target agent id, i.e. to the user
-          ((interaction as Message).role == MessageRole.USER ||
-            ((interaction as Message).role == MessageRole.ASSISTANT &&
-              (interaction as Message).sourceAgentId == agent.selectedAgent!.id))
+          (interaction as Message).content !== "" && (
+            (interaction as Message).sourceAgentId == InteractionSource.USER ||
+            (interaction as Message).targetAgentId == InteractionTarget.USER
+        )
       )
       .sort((a, b) => a.createdAt - b.createdAt) as Message[];
 
@@ -219,6 +220,39 @@ export default function PlaygroundPage() {
     }
   };
 
+  const handleClearThreads = async () => {
+    if (!conversationManager || !agent.selectedAgent) {
+      toast({
+        title: "Error",
+        description: "Conversation manager not initialized or no agent selected",
+        variant: "destructive",
+      });
+      return;
+    }
+  
+    if (window.confirm("Are you sure you want to clear all conversation threads?")) {
+      try {
+        const threads = conversationManager.getThreadsByAgent(agent.selectedAgent.id);
+        await Promise.all(threads.map(thread => 
+          conversationManager.deleteThread(thread.id)
+        ));
+        
+        setMessages([]);
+        setInteractionHistory([]);
+        toast({
+          title: "Success",
+          description: "All threads cleared successfully",
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to clear threads: " + error,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   const handleSend = async (message: string) => {
     if (!agent.selectedAgent || !conversationManager) {
       toast({
@@ -242,6 +276,7 @@ export default function PlaygroundPage() {
         type: InteractionType.MESSAGE,
         role: MessageRole.USER,
         content: message,
+        sourceAgentId: InteractionSource.USER,
         targetAgentId: agent.selectedAgent.id,
         status: InteractionStatus.PENDING,
         createdAt: Date.now(),
@@ -269,8 +304,7 @@ export default function PlaygroundPage() {
       const thread = conversationManager.getThread(threadId);
       if (thread && isMounted) {
         const agentMessages = thread.messages.filter(
-          (m) => m.role === MessageRole.ASSISTANT &&
-            m.sourceAgentId == agent.selectedAgent!.id
+          (m) => m.targetAgentId == InteractionTarget.USER
         );
         setMessages((prev) => [...prev, ...agentMessages]);
 
@@ -308,18 +342,30 @@ export default function PlaygroundPage() {
       <div className="w-80 p-4 border-r flex flex-col gap-4 overflow-hidden max-w-[15rem]">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Agents</h2>
-          <Button
-            onClick={handleAddAgent}
-            size="icon"
-            variant="outline"
-            disabled={ui.isLoading}
-          >
-            {ui.isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleClearThreads}
+              size="icon"
+              variant="outline"
+              disabled={ui.isLoading || !agent.selectedAgent}
+              title="Clear all threads"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={handleAddAgent}
+              size="icon"
+              variant="outline"
+              disabled={ui.isLoading}
+              title="Add new agent"
+            >
+              {ui.isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
         <LoadingWrapper
           isLoading={ui.isLoading}

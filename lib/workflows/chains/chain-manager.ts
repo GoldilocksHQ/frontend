@@ -1,17 +1,17 @@
-import { Manager } from "../core/base-manager";
-import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { ManagerStatus } from "../core/base-manager";
+import { Manager } from "../../core/managers/base-manager";
+import { ErrorManager, ErrorSeverity } from "../../core/managers/error-manager";
+import { ManagerStatus } from "../../core/managers/base-manager";
 import { BaseChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { BufferMemory } from "langchain/memory";
-import { ConversationChain } from "../chains/conversation-chain";
-import { JudgementChain } from "../chains/judgement-chain";
-import { TaskExecutorChain } from "../chains/task-executor-chain";
-import { TaskPlannerChain } from "../chains/task-planner-chain";
-import { ToolDefinition, ToolManager } from "./tool-manager";
-import { useChainStore } from "../stores/chain-store";
-import { AgentJudgement, AgentPlan, AgentToolCall} from "../core/thread";
-import { Agent } from "./agent-manager";
+import { ConversationChain } from "./chain-templates/conversation-chain";
+import { JudgementChain } from "./chain-templates/judgement-chain";
+import { TaskExecutorChain } from "./chain-templates/task-executor-chain";
+import { TaskPlannerChain } from "./chain-templates/task-planner-chain";
+import { ToolDefinition, ToolManager } from "../../agents/tool-manager";
+import { useChainStore } from "../../stores/chain-store";
+import { AgentJudgement, AgentPlan, AgentToolCall} from "../../core/entities/thread";
+import { Agent } from "../../agents/agent-manager";
   
 export enum ChainType {
   CONVERSATION = "conversation",

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Info, Key } from "lucide-react";
-import { Agent, AgentConfig } from "@/lib/managers/agent-manager";
+import { Agent, AgentConfig } from "@/lib/agents/agent-manager";
 import { ManagedError } from "@/lib/managers/error-manager";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,13 +14,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils/utils";
 import {
   ChainConfig,
   ChainType,
   ModelConfig,
-} from "@/lib/managers/chain-manager";
-import { AgentManager } from "@/lib/managers/agent-manager";
+} from "@/lib/workflows/chains/chain-manager";
+import { AgentManager } from "@/lib/agents/agent-manager";
 import Image from "next/image";
 import {
   Dialog,
@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ToolDefinition, ToolParameter } from "@/lib/managers/tool-manager";
+import { ToolDefinition, ToolParameter } from "@/lib/agents/tool-manager";
 import { PlaidLinkTokenDialog } from "./plaid-link-token-dialog";
 
 interface AgentConfigSidebarProps {

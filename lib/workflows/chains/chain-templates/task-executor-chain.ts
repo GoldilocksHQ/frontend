@@ -3,8 +3,8 @@ import { ChatOpenAI } from "@langchain/openai";
 import { BufferMemory } from "langchain/memory";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { z } from "zod";
-import { ToolDefinition } from "../managers/tool-manager";
-import { AgentToolCall } from "../core/thread";
+import { ToolDefinition } from "../../../agents/tool-manager";
+import { AgentToolCall } from "../../../core/entities/thread";
 
 const TASK_EXECUTION_TEMPLATE = `You are a task execution assistant. Your role is to analyze tasks and determine which connector and function to use to accomplish them.
 

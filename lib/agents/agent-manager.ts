@@ -1,13 +1,13 @@
-import { Manager } from "../core/base-manager";
-import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { ManagerStatus } from "../core/base-manager";
+import { Manager } from "../core/managers/base-manager";
+import { ErrorManager, ErrorSeverity } from "../core/managers/error-manager";
+import { ManagerStatus } from "../core/managers/base-manager";
 import {
   ChainManager,
   ChainConfig,
   ChainType,
   ModelConfig,
   Chain,
-} from "./chain-manager";
+} from "../workflows/chains/chain-manager";
 import { ToolDefinition, ToolManager } from "./tool-manager";
 import { useAgentStore } from "../stores/agent-store";
 
@@ -100,7 +100,7 @@ export class AgentManager extends Manager {
     }
   }
 
-  async createAgent(config: AgentConfig): Promise<Agent> {
+  createAgent(config: AgentConfig): Promise<Agent> {
     try {
       // Validate chain if provided
       const model = this.chainManager
@@ -142,14 +142,14 @@ export class AgentManager extends Manager {
       this.agents.set(agentId, agent);
       useAgentStore.getState().addAgent(agent);
       this.logger.info(`Agent created: ${config.name} (${agentId})`);
-      return agent;
+      return Promise.resolve(agent);
     } catch (error) {
       this.errorManager.logError(error as Error, {
         source: this.name,
         severity: ErrorSeverity.HIGH,
         metadata: { agentName: config.name },
       });
-      throw error;
+      return Promise.reject(error);
     }
   }
 
@@ -244,6 +244,10 @@ export class AgentManager extends Manager {
     return this.toolManager.getTool(id);
   }
 
+  getToolByName(name: string): ToolDefinition | undefined {
+    return this.toolManager.getToolByName(name);
+  }
+
   getToolExecutor(
     id: string
   ): (
@@ -272,5 +276,28 @@ export class AgentManager extends Manager {
 
   getAvailableChainTypes(): ChainType[] {
     return this.chainManager.getAvailableChainTypes();
+  }
+
+  // Create different types of standard agents
+  async createValidatorAgent(modelName?: string): Promise<Agent> {
+    return await this.createAgent({
+      name: `Validator Agent`,
+      description: "A validator agent that is responsible for validating the quality of the task output",
+      chainType: ChainType.JUDGEMENT,
+      modelName: modelName || this.getAvailableModels()[0].name,
+      toolIds: [],
+      linkedAgentIds: [],
+    });
+  } 
+
+  async createSummaryAgent(modelName?: string): Promise<Agent> {
+    return await this.createAgent({
+      name: `Summary Agent`,
+      description: "A summary agent that is responsible for summarizing plan and output",
+      chainType: ChainType.CONVERSATION,
+      modelName: modelName || this.getAvailableModels()[0].name,
+      toolIds: [],
+      linkedAgentIds: [],
+    });
   }
 }

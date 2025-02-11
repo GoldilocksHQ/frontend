@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import { Connector, ConnectorManager } from "@/lib/managers/connector-manager";
+import { Connector, ConnectorManager } from "@/lib/services/connector-manager";
 import path from "path";
 import { Loader2 } from "lucide-react";
 import { PlaidLinkError,  usePlaidLink } from 'react-plaid-link';

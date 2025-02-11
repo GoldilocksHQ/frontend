@@ -2,7 +2,7 @@ import { BaseChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { BufferMemory } from "langchain/memory";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { type AgentPlan} from "../core/thread";
+import { type AgentPlan} from "../../../core/entities/thread";
 import { z } from "zod";
 
 // TASK_PLANNING_TEMPLATE
@@ -40,7 +40,7 @@ const responseSchema = z.object({
   tasks: z.array(z.object({
     step: z.number().describe("The unique identifier for the task"),
     instruction: z.string().describe("The instruction of the task"),
-    keyInputs: z.array(z.string()).optional().describe("The key inputs for the task expressed in sentences"),
+    keyInputs: z.array(z.string()).default([]).describe("The key inputs for the task and tool calls"),
     tools: z.array(z.string().optional().describe("The tools that are needed to complete the task")),
     dependencies: z.array(z.number()).describe("The tasks that must be completed before this task can be started"),
     requiredAgentId: z.string().describe("The ID of the agent that is required to complete the task. Do not use agent names, only ID"),
@@ -125,10 +125,10 @@ export class TaskPlannerChain extends BaseChain {
         agentPlan = {
           goal: response.goal,
           tasks: response.tasks.map((task) => {
-          return {
+            return {
               step: task.step,
               instruction: task.instruction,
-              keyInputs: task.keyInputs || [],
+              keyInputs: task.keyInputs && task.keyInputs.length > 0 ? task.keyInputs : [],
               tools: task.tools.filter((tool): tool is string => tool !== undefined),
               dependencies: task.dependencies.map((dependency) => dependency.toString()),
               requiredAgentId: task.requiredAgentId,

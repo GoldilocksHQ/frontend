@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Agent, AgentJSON } from '../managers/agent-manager'
-import { models, ModelConfig } from '../managers/chain-manager'
+import { Agent, AgentJSON } from '../agents/agent-manager'
+import { models, ModelConfig } from '../workflows/chains/chain-manager'
 import { customStorage, logMiddleware } from './middleware'
 import { StateCreator } from 'zustand'
 

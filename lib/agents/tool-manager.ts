@@ -1,6 +1,6 @@
-import { Manager } from "../core/base-manager";
-import { ErrorManager, ErrorSeverity } from "./error-manager";
-import { ManagerStatus } from "../core/base-manager";
+import { Manager } from "../core/managers/base-manager";
+import { ErrorManager, ErrorSeverity } from "../core/managers/error-manager";
+import { ManagerStatus } from "../core/managers/base-manager";
 
 export interface ToolDefinition {
   id: string;
@@ -122,6 +122,10 @@ export class ToolManager extends Manager {
   // Pass Through Tool Management methods
   getTool(toolId: string): ToolDefinition | undefined {
     return this.tools.get(toolId);
+  }
+
+  getToolByName(name: string): ToolDefinition | undefined {
+    return Array.from(this.tools.values()).find((tool) => tool.name === name);
   }
 
   getExecutor(

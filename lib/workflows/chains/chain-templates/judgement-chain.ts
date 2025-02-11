@@ -1,7 +1,7 @@
 import { BaseChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
-import { AgentJudgement } from "../core/thread";
+import { AgentJudgement } from "../../../core/entities/thread";
 import { z } from "zod";
 
 const JUDGEMENT_TEMPLATE = `You are a judgement assistant. Your role is to evaluate if a response satisfies the given requirements.

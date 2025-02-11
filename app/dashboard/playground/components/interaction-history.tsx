@@ -1,5 +1,5 @@
-import { Interaction, InteractionType, Judgement, Message, ToolCall, Plan, Task } from "@/lib/core/thread";
-import { AgentManager } from "@/lib/managers/agent-manager";
+import { Interaction, InteractionType, Judgement, Message, ToolCall, Plan, Task } from "@/lib/core/entities/thread";
+import { AgentManager } from "@/lib/agents/agent-manager";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import React from "react";
@@ -78,6 +78,7 @@ export function InteractionHistory({
                 step: task.step,
                 instruction: task.instruction,
                 keyInputs: task.keyInputs,
+                sourceAgentId: task.sourceAgentId,
                 targetAgentId: task.targetAgentId,
                 status: task.status,
                 error: {
